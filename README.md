@@ -1,4 +1,4 @@
-# Conditional Banch
+# Conditional Branch
 Adding covariates to create conditional TFR projections
 
 # bayesTFR
