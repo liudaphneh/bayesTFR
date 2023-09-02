@@ -1,3 +1,6 @@
+# Conditional Banch
+Adding covariates to create conditional TFR projections
+
 # bayesTFR
 
 [![R build status](https://github.com/PPgp/bayesTFR/workflows/R-CMD-check/badge.svg?branch=master)](https://github.com/PPgp/bayesTFR/actions?workflow=R-CMD-check)
