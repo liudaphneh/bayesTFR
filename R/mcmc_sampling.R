@@ -111,14 +111,202 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 	mcenv$const_sd_dummie_Tc[mid.years[-length(mid.years)] < 1975,] <- 1
 
   	mcenv$mean_eps_Tc <- matrix(0, mcenv$meta$T_end -1+suppl.T, nr_countries_all)
-    idx.tau_c.id.notearly.all <- matrix(c(mcenv$meta$tau_c[id_notearly_all], id_notearly_all), ncol=2)
+  	
+  	# DAPHNE: modified idx.tau_c.id.notearly.all and idx.tau_c.id.notearly
+  	#    - tau_c restricts to Phase III country-time pairs
+  	#    - but also need to restrict to where we have covariate data (e.g. start_cov_data_c)
+  	start.both.phaseII.cov <-	apply(matrix(c(mcenv$meta$start_cov_data_c[id_notearly_all], mcenv$meta$tau_c[id_notearly_all]), ncol = 2), 1, max)
+  	idx.tau_c.id.notearly.all <- matrix(c(start.both.phaseII.cov, id_notearly_all), ncol=2)
+  	# some of these are NA, so remove from idx.tau_c.id.notearly.all 
+  	idx.tau_c.id.notearly.all <- idx.tau_c.id.notearly.all[which(!is.na(idx.tau_c.id.notearly.all[,1])), ]
 	mcenv$mean_eps_Tc[idx.tau_c.id.notearly.all] <- mcenv$mean_eps_tau
 	
-	idx.tau_c.id.notearly <- matrix(c(mcenv$meta$tau_c[id_notearly], id_notearly), ncol=2)
+	start.both.phaseII.cov <-	apply(matrix(c(mcenv$meta$start_cov_data_c[id_notearly], mcenv$meta$tau_c[id_notearly]), ncol = 2), 1, max)
+	idx.tau_c.id.notearly <- matrix(c(start.both.phaseII.cov, id_notearly), ncol=2)
+	# remove NAs
+	idx.tau_c.id.notearly <- idx.tau_c.id.notearly[which(!is.na(idx.tau_c.id.notearly[,1])), ]
+	
+	############ DAPHNE: setting up sampling for covariate term ############
+	#### priors for beta
+	X.educ <- as.vector(t(mcenv$meta$educ))
+	X.fp <- as.vector(t(mcenv$meta$fp))
+	idxX.educ <- !is.na(X.educ)  # NA when data is not available
+	idxX.fp <- !is.na(X.fp)      # NA when data is not available
+	X.g <- as.vector(t(mcenv$meta$gdp))
+	idxX.g <- !is.na(X.g)        # NA when data is not available
+	SSA.ind <- rep(mcenv$meta$SSA_indicator, times = nrow(mcenv$meta$educ))
+	tfr.decr.vector <- as.vector(t(mcenv$meta$tfr_decr))
+	idxtfr.decr <- !is.na(tfr.decr.vector) 
+	
+	# retain non-NA values
+	X.educ <- X.educ[idxX.educ & idxX.fp & idxtfr.decr & idxX.g]
+	X.fp <- X.fp[idxX.educ & idxX.fp & idxtfr.decr & idxX.g]
+	X.g <- X.g[idxX.educ & idxX.fp & idxtfr.decr & idxX.g]
+	SSA.ind <- SSA.ind[idxX.educ & idxX.fp & idxtfr.decr & idxX.g]
+	tfr.decr.vector <- tfr.decr.vector[idxX.educ & idxX.fp & idxtfr.decr & idxX.g]
+	
+	# prior sd for beta: 0.5*sd(TFR decr)/sd(variable of interest)
+	# for sensitivity analysis: wider = *sqrt(2) and narrower = *(1/sqrt(2))
+	sdbeta.e <- 0.5*sd(tfr.decr.vector)/sd(X.educ)
+	sdbeta.fp <- 0.5*sd(tfr.decr.vector)/sd(X.fp)
+	sdbeta.g <- 0.5*sd(tfr.decr.vector)/sd(X.g)
+	sdbeta.e.SSA <- 0.5*sd(tfr.decr.vector)/sd(SSA.ind * X.educ)
+	sdbeta.fp.SSA <- 0.5*sd(tfr.decr.vector)/sd(SSA.ind * X.fp)
+	sdbeta.g.SSA <- 0.5*sd(tfr.decr.vector)/sd(SSA.ind * X.g)
+	
+	# for beta posterior
+	sdbeta.inv.e <- 1/sdbeta.e^2
+	sdbeta.inv.fp <- 1/sdbeta.fp^2
+	sdbeta.inv.g <- 1/sdbeta.g^2
+	sdbeta.inv.e.SSA <- 1/sdbeta.e.SSA^2
+	sdbeta.inv.fp.SSA <- 1/sdbeta.fp.SSA^2
+	sdbeta.inv.g.SSA <- 1/sdbeta.g.SSA^2
+	
+	#### for estimation of between-country correlation (bc_rho)
+	# retain non-NA values for clusterUNregion
+	cluster <- mcenv$meta$cluster
+	cluster <- cluster[idxX.educ & idxX.fp & idxtfr.decr & idxX.g]
+	
+	# find indices when cluster membership changes
+	# used to create block diagonal correlation matrix R
+	new.clust <- c(1)
+	for(i in 1:(length(cluster)-1)){
+	  if(cluster[i] != cluster[i+1]){ new.clust <- c(new.clust, i+1) }
+	}
+	
+	# function to obtain n x n block diagonal matrix R^{-1} from given rho
+	# used to find posterior of beta
+	get.R.from.rho <- function(rho, n, new.clust){
+	  R <- diag(n)
+	  
+	  for(i in 1:(length(new.clust) - 1)){
+	    # each of these indices indicates the start of a new block A_j^{-1}
+	    # fill in the off-diagonals of that n_j x n_j block with rho
+	    
+	    # size of block Aj
+	    nj <- new.clust[i+1] - new.clust[i]
+	    
+	    # indices of R corresponding to block A_j^{-1}
+	    A.j.idx <- new.clust[i]:(new.clust[i] + nj - 1)
+	    
+	    # polynomials for entries of A_j^{-1}
+	    a.2 <- (-1*rho)/((1-rho) * (1 - rho + nj*rho))
+	    a.1 <- 1/(1-rho) + a.2
+	    
+	    # R[j,k] elements filled in for A_j^{-1}
+	    for(j in A.j.idx){
+	      for(k in A.j.idx){
+	        if(j == k){ R[j,k] <- a.1}  # diagonal
+	        if(j != k){ R[j,k] <- a.2 } # off-diagonals
+	      }
+	    }
+	  }
+	  return(R)
+	}
+	
+	# function to obtain posterior loglikelihood of rho, conditional on other parameters 
+	rho.post.ll <- function(rho, X, Y, beta, sigma, new.clust){
+	  # to store loglik
+	  ll <- 0
+	  
+	  # create z = (y- xbeta)/sigma
+	  z.vector <- (Y - X %*% beta)/sigma
+	  
+	  # for each block, obtain contribution to posterior loglik
+	  for(j in 1:(length(new.clust) - 1)){
+	    
+	    # size of block Aj
+	    nj <- new.clust[j+1] - new.clust[j]
+	    
+	    # values of z.vector corresponding to block A_j
+	    zj <- z.vector[j:(j + nj)]
+	    
+	    # add this block's contribution to loglik
+	    ll <- ll + rho.post.ll.Aj(rho, nj, zj)
+	  }
+	  
+	  # add indicator function
+	  ll <- ll + log((rho >= 0) & (rho <= 1))
+	  return(ll)
+	}
+	
+	# function to obtain component for block A_j for posterior log likelihood of rho
+	#      nj = size of block A_j
+	#      zj = z.vector for block A_j
+	rho.post.ll.Aj <- function(rho, nj, zj){
+	  # define polynomials that frequently show up
+	  a.2 <- (-1*rho)/((1-rho) * (1 - rho + nj*rho))
+	  a.1 <- 1/(1-rho) + a.2
+	  
+	  # determinant part
+	  det.Aj <- -(1/2) * (log(1 - rho + nj*rho) + (nj - 1)*log(1 - rho))
+	  
+	  # create z.2 and z.cross terms for the exponential term
+	  # z.2 = sum_{i=1}^{n_j} z_i^2
+	  z.2 <- sum(zj^2)
+	  # z.cross = sum_{i=1}^{n_j} sum_{k \neq i} z_i z_k
+	  z.cross <- 0
+	  for(i in 1:nj){
+	    for(k in 1:nj){
+	      if(i != k){ z.cross <- z.cross + (zj[i] * zj[k]) }
+	    }
+	  }
+	  
+	  # exponent part
+	  exp.Aj <- -(1/2) * (a.1*z.2 + a.2*z.cross)
+	  
+	  return(det.Aj + exp.Aj)
+	}
+	
+	# initialize acceptance rate counter variables
+	rho.n.iter <- 0
+	rho.accept <- 0
+	
+	############ DAPHNE: load parameter traces from default run of bayesTFR ############
+	# beta's are sampled conditionally on all other parameters in bayesTFR
+	# so in this step, we load in the parameter traces from a converged run of default (unconditional) bayesTFR
+	# 20230903 testing: we won't do this yet since we're just testing if the mcmc_ini etc. code changes work
+	# (requires m.default to be an object in the environment... maybe should initialize this somehow)
+	# m.default.burnin <- 20000
+	# mean_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("mean_eps_tau"), 
+	#                                                 burnin = m.default.burnin)
+	# sd_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("sd_eps_tau"), 
+	#                                               burnin = m.default.burnin)
+	# chi.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("chi"), burnin = m.default.burnin)
+	# psi.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("psi"), burnin = m.default.burnin)
+	# Triangle4.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("Triangle4"), 
+	#                                              burnin = m.default.burnin)
+	# delta4.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("delta4"), 
+	#                                           burnin = m.default.burnin)
+	# alpha.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("alpha"), 
+	#                                          burnin = m.default.burnin)
+	# delta.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("delta"), 
+	#                                          burnin = m.default.burnin)
+	# 
+	# # sample once from parameter traces for whole iter
+	# iter.sample <- sample(1:nrow(delta.traces), size = nr_simu-start.iter+1, replace = TRUE)
+	# 
+	# # for country-specific parameters, store samples as list, each country is separate element
+	# d.samples <- list()
+	# gamma.samples <- list()
+	# Trianglec4.samples <- list()
+	# U.samples <- list()
+	# for (country in id_DL_all){
+	#   country.i.obj <- get.country.object(country, meta = m.twostage$meta, index = TRUE)
+	#   country.traces <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = country.i.obj, par.names = c("d", "gamma", "Triangle_c4"), burnin = m.default.burnin)
+	#   d.samples[[country]] <- country.traces[iter.sample,1]
+	#   gamma.samples[[country]] <- country.traces[iter.sample, c(2,3,4)]
+	#   Trianglec4.samples[[country]] <- country.traces[iter.sample,5]
+	#   U.samples[[country]] <- get.tfr.parameter.traces.cs(m.default.new$mcmc.list, country.obj = country.i.obj, par.names = "U", burnin = m.default.burnin)[iter.sample]
+	# }
+	#### end Daphne ####
+	
   ################################################################### 
     # Start MCMC
 	############
 	  for (simu in start.iter:nr_simu) {
+	    # DAPHNE: index for iter.sample (20230903 not used yet)
+	    #iter.idx <- simu - start.iter + 1
 	    
 	    if(verbose.iter > 0 && (simu %% verbose.iter == 0))
         	cat('\nIteration:', simu, '--', date())
@@ -207,6 +395,112 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 
          sum_gammas <- apply( (mcenv$gamma_ci[id_DL,] - t(ones*mcenv$alpha) )^2, 2, sum)
          mcenv$delta <- sqrt(1/rgamma(3,a_delta , rate = 1/2*(prod_delta0 + sum_gammas) ) )
+         
+         ##################################################################
+         # DAPHNE: bc_rho, beta
+         ##################################################################
+         #### compute outcome variable Y = TFR Decr + DL ####
+         # using current TFR to compute DL
+         Y.matrix <- matrix(nrow = nrow(mcenv$meta$tfr_decr), ncol = ncol(mcenv$meta$tfr_decr))
+         rownames(Y.matrix) <- rownames(mcenv$meta$tfr_decr)
+         colnames(Y.matrix) <- colnames(mcenv$meta$tfr_decr)
+         
+         for(country in 1:ncol(Y.matrix)){
+           # vector of observed non-NA TFR values
+           # if have NAs, then start of Phase II will be earlier than start of covariate data
+           start.idx <- max(mcenv$meta$start_c[country], mcenv$meta$start_cov_data_c[country])
+           tfr.vctr <- get.observed.tfr(country, mcenv$meta, matrix.name = 'tfr_matrix')[start.idx:mcenv$meta$lambda_c[country]]
+           ldl <- length(tfr.vctr)-1
+           
+           # expected decrements for the observed TFR
+           theta.pars <- c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
+           DL.obs <- DLcurve(theta.pars, tfr.vctr[1:ldl], mcenv$meta$dl.p1, mcenv$meta$dl.p2, annual = mcenv$meta$annual.simulation)
+           names(DL.obs) <- names(tfr.vctr)[2:(ldl+1)]
+           
+           # vector of TFR Decr
+           tfr.decr.vctr <- mcenv$meta$tfr_decr[ ,country]
+           tfr.decr.vctr <- tfr.decr.vctr[!is.na(tfr.decr.vctr)]
+           tfr.decr.obs.years <- names(tfr.decr.vctr)
+           obs.years <- intersect(names(DL.obs), tfr.decr.obs.years)
+           
+           # compute outcome Y = TFR Decr + Expected Decr
+           Y.matrix[obs.years, country] <- tfr.decr.vctr + DL.obs
+         }
+         
+         #### set up vectors ####
+         Y.v <- as.vector(t(Y.matrix))[idxX.educ & idxX.fp & idxtfr.decr & idxX.g]
+         X.mv <- cbind(X.educ, X.fp, X.g, SSA.ind*X.educ, SSA.ind*X.fp, SSA.ind*X.g)
+         # for indices to match up for SD vector, add in the first time period row to mcenv$sd_Tc as all NAs
+         sd_Tc_temp <- rbind(rep(NA, ncol(mcenv$sd_Tc)), mcenv$sd_Tc)
+         sd.v <- as.vector(t(sd_Tc_temp))[idxX.educ & idxX.fp & idxtfr.decr & idxX.g]
+         beta.v <- c(mcenv$beta_e, mcenv$beta_fp, mcenv$beta_g,
+                     mcenv$beta_e_SSA, mcenv$beta_fp_SSA, mcenv$beta_g_SSA)
+         
+         #### bc_rho: Metropolis-Hastings step ####
+         # proposal function: truncated normal from truncnorm
+         rho.old <- mcenv$bc_rho
+         rho.new <- rtruncnorm(1, a=0, b=1, mean=rho.old, sd=0.04)
+         
+         # acceptance ratio = exp(loglik_new + prior_new - loglik_old - prior_old)
+         loglik.new <- rho.post.ll(rho.new, X.mv, Y.v, beta.v, sd.v, new.clust)
+         loglik.old <- rho.post.ll(rho.old, X.mv, Y.v, beta.v, sd.v, new.clust)
+         prior.new <- log(dtruncnorm(1, a=0, b=1, mean=rho.new, sd=0.04))
+         prior.old <- log(dtruncnorm(1, a=0, b=1, mean=rho.old, sd=0.04))
+         rho.AR <- exp(loglik.new + prior.new - loglik.old - prior.old)
+         
+         # acceptance rate = fraction of proposed samples that is accepted
+         rho.n.iter <- rho.n.iter + 1
+         if(runif(1, 0, 1) <= rho.AR){
+           mcenv$bc_rho <- rho.new
+           rho.accept <- rho.accept + 1
+         } # else, reject (mcenv$bc_rho does not chage)
+         
+         # check acceptance rate at end of each chain
+         if(rho.n.iter == (nr_simu-1)){
+           print(paste("acceptance rate =", rho.accept/rho.n.iter))
+         }
+         
+         #### beta: Gibbs step ####
+         # multivariate posterior of beta, using correlation matrix R 
+         
+         # get matrix R^{-1} from rho
+         R.inv <- get.R.from.rho(mcenv$bc_rho, length(sd.v), new.clust)
+         # March 30, 2020: convert to sparse matrix using Matrix library
+         R.inv <- as(R.inv, "sparseMatrix")
+         
+         # create matrix \Sigma^{-1}
+         Sigma.inv <- diag(1/sd.v) %*% R.inv %*% diag(1/sd.v)
+         # convert back to normal matrix
+         Sigma.inv <- as.matrix(Sigma.inv)
+         
+         # posterior mean and SD of beta
+         # var = (X^T \Sigma^{-1} X + \Omega^{-1})^{-1}
+         # mean = (var) X^T \Sigma^{-1} Y 
+         X.Sigma.inv <- crossprod(X.mv, Sigma.inv) # = t(X.mv) %*% Sigma.inv
+         sXY.mv <- X.Sigma.inv %*% Y.v
+         XX.mv <- X.Sigma.inv %*% X.mv
+         denom.mv <- solve(XX.mv + diag(c(sdbeta.inv.e, sdbeta.inv.fp, sdbeta.inv.g, 
+                                          sdbeta.inv.e.SSA, 
+                                          sdbeta.inv.fp.SSA, sdbeta.inv.g.SSA)))
+
+         mv.sample <- rmvnorm(1, mean=crossprod(sXY.mv, denom.mv), sigma = denom.mv)
+         mcenv$beta_e <- mv.sample[1]
+         mcenv$beta_fp <- mv.sample[2]
+         mcenv$beta_g <- mv.sample[3]
+         mcenv$beta_e_SSA <- mv.sample[4]
+         mcenv$beta_fp_SSA <- mv.sample[5]
+         mcenv$beta_g_SSA <- mv.sample[6]
+         
+         # update eps_T after all parameters are estimated for this iter
+         beta_for_eps_T <- c(mcenv$beta_e, mcenv$beta_fp, mcenv$beta_g, 
+                             mcenv$beta_e_SSA, mcenv$beta_fp_SSA, mcenv$beta_g_SSA)
+         for(country in id_DL_all){
+           theta_for_eps_T <-  c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
+           
+           start.idx <- max(mcenv$meta$start_c[country], mcenv$meta$start_cov_data_c[country])
+           mcenv$eps_Tc[start.idx:(mcenv$meta$lambda_c[country]-1), country] <- get.eps.T(theta_for_eps_T, beta_for_eps_T, country, mcenv$meta)
+         }
+         
 
          ##################################################################
          # Phase III
@@ -364,6 +658,7 @@ unblock.gtk <- function(option, options.list=NULL) {
 
 }
 
+# DAPHNE: 20230903 need to update this still
 tfr.mcmc.sampling.extra <- function(mcmc, mcmc.list, countries, posterior.sample,
 											 iter=NULL, thin = 1, burnin=2000, verbose=FALSE, verbose.iter=100, uncertainty=FALSE) {
 	#run mcmc sampling for countries given by the index 'countries'
