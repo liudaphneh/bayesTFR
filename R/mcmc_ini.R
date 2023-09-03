@@ -21,13 +21,28 @@ DLcurve <- function(DLpar, tfr, p1, p2, annual = FALSE){
 # function to get the distortion for country for a given set of DLparameters
 # note: this function gives only the eps's in (tau, lambda-1)
 # (because rest is NA!!)
-
-get.eps.T <- function (DLpar, country, meta, ...) 
+# DAPHNE:
+#    - modified to account for covariate term in eps calculation
+#    - added argument betapar = c(beta_E, beta_FP, beta_GDP, beta_e_SSA, beta_fp_SSA, beta_g_SSA)
+get.eps.T <- function (DLpar, betapar, country, meta, ...) 
 {
-    tfr <- get.observed.tfr(country, meta, ...)[meta$start_c[country]:meta$lambda_c[country]]
+    # Daphne: if we have NAs, then start of Phase II will be earlier then start of covariate data
+    start_idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
+  
+    tfr <- get.observed.tfr(country, meta, ...)[start_idx:meta$lambda_c[country]]
     ldl <- length(tfr)-1
     dl <- DLcurve(DLpar, tfr[1:ldl], meta$dl.p1, meta$dl.p2, annual = meta$annual.simulation)
-    eps <- tfr[2:(ldl+1)] - tfr[1:ldl] + dl
+    
+    # Daphne: covariate term
+    educ.c <- meta$educ[start_idx:meta$lambda_c[country], country][1:ldl]
+    fp.c <- meta$fp[start_idx:meta$lambda_c[country], country][1:ldl]
+    gdp.c <- meta$gdp[start_idx:meta$lambda_c[country], country][1:ldl]
+    SSA.c <- meta$SSA_indicator[country]
+    covariate_contr <- betapar[1]*educ.c + betapar[2]*fp.c + betapar[3]*gdp.c +
+      betapar[4]*educ.c*SSA.c + betapar[5]*fp.c*SSA.c + betapar[6]*gdp.c*SSA.c
+    
+    # Daphne: add covariate term to eps calculation
+    eps <- tfr[2:(ldl+1)] - tfr[1:ldl] + dl - covariate_contr
     if (!is.null(meta$ar.phase2) && meta$ar.phase2) 
     {
       args <- list(...)
@@ -47,18 +62,29 @@ get.eps.T <- function (DLpar, country, meta, ...)
     return (eps)
 }
 
+# DAPHNE
+#    - modified to account for covariate term in eps calculation
 get_eps_T_all <- function (mcmc, ...) {
   suppl.T <- if(!is.null(mcmc$meta$suppl.data$regions)) mcmc$meta$suppl.data$T_end else 0
 	eps_Tc <- matrix(NA, mcmc$meta$T_end-1 + suppl.T, mcmc$meta$nr_countries)
+	
+	# Daphne: load in beta
+	beta <- c(mcmc$beta_e, mcmc$beta_fp, mcmc$beta_g, mcmc$beta_e_SSA, mcmc$beta_fp_SSA, mcmc$beta_g_SSA)
+	
   for (country in mcmc$meta$id_DL){
     theta <- c((mcmc$U_c[country]-mcmc$Triangle_c4[country])*exp(mcmc$gamma_ci[country,])/                                     
       sum(exp(mcmc$gamma_ci[country,])), mcmc$Triangle_c4[country], mcmc$d_c[country])
-    idx <- mcmc$meta$start_c[country]:(mcmc$meta$lambda_c[country]-1)
+    
+    # Daphne: modify idx since if we have NAs, then start of Phase II will be earlier than the start of covariate data
+    start_idx <- max(mcmc$meta$start_c[country], mcmc$meta$start_cov_data_c[country])
+    idx <- start_idx:(mcmc$meta$lambda_c[country]-1)
     raw.outliers <- mcmc$meta$indices.outliers[[as.character(country)]]
     if (!is.null(mcmc$meta$ar.phase2) && mcmc$meta$ar.phase2) 
       raw.outliers <- sort(unique(c(raw.outliers, raw.outliers+1)))
     idx <- setdiff(idx, raw.outliers)
-    eps_Tc[idx, country] <- get.eps.T(theta, country, mcmc$meta, ...)
+    
+    # Daphne: added beta argument
+    eps_Tc[idx, country] <- get.eps.T(theta, beta, country, mcmc$meta, ...)
   }
 	
   return(eps_Tc)
@@ -239,6 +265,146 @@ find.raw.data.outliers <- function(raw.tfr, iso.unbiased, max.drop=1, max.increa
   return (outliers)
 }
 
+
+# DAPHNE: function for covariate additions to meta
+#    - adds education, FP, and GDP data
+#    - adds indicator for whether countries have available covariate data 
+#    - adds country-specific cluster membership for beta sampling
+#    - adds indicator for SSA membership
+covariate.meta.ini <- function(meta){
+  # import covariate data
+  if(annual){
+    educ <- read.table(here("../Data", "educ_oneyear_for_testing.txt"))
+    fp <- read.table(here("../Data", "fp_oneyear_for_testing.txt"))
+    gdp <- read.table(here("../Data", "gdp_oneyear_for_testing.txt"))
+  } else{
+    educ <- read.table(here("../Conditional/Data", "educ_2_hier_X_minus_Xstar_20230114.txt"))
+    fp <- read.table(here("../Conditional/Data", "CP_X_minus_Xstar_20210210.txt"))
+    gdp <- read.table(here("../Conditional/Data", "gdp_X_minus_Xstar_20210309.txt"))
+  }
+  
+  ##### format to match tfr_matrix #####
+  # education
+  educ.w <- spread(select(educ, -country), code, attain)
+  rownames(educ.w) <- educ.w$year
+  educ.w <- select(educ.w, intersect(colnames(meta$tfr_matrix), colnames(educ.w)))
+  # add years with no educ data 
+  no.educ.years <- data.frame(matrix(nrow = length(setdiff(rownames(meta$tfr_matrix), rownames(educ.w))), ncol = ncol(educ.w)))
+  rownames(no.educ.years) <- setdiff(rownames(meta$tfr_matrix), rownames(educ.w))
+  colnames(no.educ.years) <- colnames(educ.w)
+  educ.w <- rbind(educ.w, no.educ.years)
+  educ.w <- educ.w[rownames(educ.w)[order(as.numeric(rownames(educ.w)))], ]
+  # add countries with no educ data
+  no.educ.data <- data.frame(matrix(nrow = nrow(educ.w), ncol = length(setdiff(colnames(meta$tfr_matrix), colnames(educ.w)))))
+  colnames(no.educ.data) <- setdiff(colnames(meta$tfr_matrix), colnames(educ.w))
+  educ.w <- bind_cols(educ.w, no.educ.data)
+  educ.w <- select(educ.w, colnames(meta$tfr_matrix))
+  
+  # family planning
+  fp.w <- spread(select(fp, -country), code, CP_modern)
+  rownames(fp.w) <- fp.w$year
+  fp.w <- select(fp.w, intersect(colnames(meta$tfr_matrix), colnames(fp.w)))
+  # add years with no FP data
+  no.fp.years <- data.frame(matrix(nrow = length(setdiff(rownames(meta$tfr_matrix), rownames(fp.w))), ncol = ncol(fp.w)))
+  rownames(no.fp.years) <- setdiff(rownames(meta$tfr_matrix), rownames(fp.w))
+  colnames(no.fp.years) <- colnames(fp.w)
+  fp.w <- rbind(no.fp.years, fp.w)
+  fp.w <- fp.w[rownames(fp.w)[order(as.numeric(rownames(fp.w)))], ]
+  # add countries with no FP data
+  no.fp.data <- data.frame(matrix(nrow = nrow(fp.w), ncol = length(setdiff(colnames(meta$tfr_matrix), colnames(fp.w)))))
+  colnames(no.fp.data) <- setdiff(colnames(meta$tfr_matrix), colnames(fp.w))
+  fp.w <- bind_cols(fp.w, no.fp.data)
+  fp.w <- select(fp.w, colnames(meta$tfr_matrix))
+  rownames(fp.w) <- rownames(educ.w)
+  
+  # GDP
+  gdp.w <- spread(select(gdp, -country), code, gdp_perc_change)
+  rownames(gdp.w) <- gdp.w$year
+  gdp.w <- select(gdp.w, intersect(colnames(meta$tfr_matrix), colnames(gdp.w)))
+  # add years with no GDP data
+  no.gdp.years <- data.frame(matrix(nrow = length(setdiff(rownames(meta$tfr_matrix), rownames(gdp.w))), ncol = ncol(gdp.w)))
+  rownames(no.gdp.years) <- setdiff(rownames(meta$tfr_matrix), rownames(gdp.w))
+  colnames(no.gdp.years) <- colnames(gdp.w)
+  gdp.w <- rbind(no.gdp.years, gdp.w)
+  gdp.w <- gdp.w[rownames(gdp.w)[order(as.numeric(rownames(gdp.w)))], ]
+  # add countries with no GDP data
+  no.gdp.data <- data.frame(matrix(nrow = nrow(gdp.w), ncol = length(setdiff(colnames(meta$tfr_matrix), colnames(gdp.w)))))
+  colnames(no.gdp.data) <- setdiff(colnames(meta$tfr_matrix), colnames(gdp.w))
+  gdp.w <- bind_cols(gdp.w, no.gdp.data)
+  gdp.w <- select(gdp.w, colnames(meta$tfr_matrix))
+  rownames(gdp.w) <- rownames(educ.w)
+  
+  ##### complete case indicator #####
+  # create a matrix that indicates which country-time pairs have 
+  # education, FP, and GDP data (complete cases)
+  cc.matrix <- !is.na(educ.w) & !is.na(fp.w) & !is.na(gdp.w)
+  meta$cc_matrix <- cc.matrix
+  #write.table(cc.matrix, file=here("Data", "cc_matrix_20191111.txt"))
+  
+  ##### add covariate data and cluster membership to meta #####
+  meta$educ <- educ.w
+  meta$fp <- fp.w
+  meta$gdp <- gdp.w
+  
+  # cluster membership information: a vector with cluster membership ID in the same country-time ordering as as.vector(t(mcenv$educ))
+  if(annual){
+    clusterUNregion <- read.table(here("../Data", "clusters_oneyear_testing.txt"))
+  } else{
+    clusterUNregion <- read.table(here("../../Conditional/Data", "bayestfr_clusters_20201123.txt"))
+  }
+  # retain only countries in tfr_matrix
+  clusterUNregion <- filter(clusterUNregion, code %in% colnames(meta$tfr_matrix))
+  meta$cluster <- clusterUNregion$cluster
+  
+  ##### start index of covariate data for each country #####
+  meta$start_cov_data_c <- as.numeric(apply(meta$cc_matrix, 2, function(x){which(x == TRUE)}[1]))
+  
+  ##### indicator for SSA membership #####
+  # SSA = region codes c(910, 911, 913, 914)
+  # i.e. region names Eastern Africa, Middle Africa, Southern Africa, Western Africa
+  SSA_indicator <- filter(clusterUNregion, year == 2020) %>% select(code, region)
+  SSA_indicator$SSA <- SSA_indicator$region %in% c("Eastern Africa", "Middle Africa", "Southern Africa", "Western Africa")
+  SSA_indicator <- filter(SSA_indicator, code %in% colnames(meta$tfr_matrix)) 
+  meta$SSA_indicator <- as.numeric(SSA_indicator$SSA)
+  
+  return(meta)
+}
+
+# DAPHNE: function for TFR decrement additions to meta
+#    - constructs TFR decrements where delta f_{c,t+1} = f_{c,t+1} - f_{c,t}
+#    - decrements are labeled with year t+1
+#    - saves as tfr_decr in meta, formatted like tfr_matrix
+decr.meta.ini <- function(meta){
+  T <- nrow(meta$tfr_matrix)
+  tfr.decr <- matrix(NA, nrow=T, ncol=meta$nr_countries, 
+                     dimnames=list(rownames(meta$tfr_matrix)[1:(T)],
+                                   colnames(meta$tfr_matrix)))
+  for(i in 2:T) {
+    nisna0 <- !is.na(meta$tfr_matrix[i-1,])
+    nisna1 <- !is.na(meta$tfr_matrix[i,])
+    nisna2 <- nisna1 & nisna0
+    if (sum(nisna2) > 0) {
+      tfr.decr[i,  nisna2] <- meta$tfr_matrix[i,nisna2] - meta$tfr_matrix[i-1,nisna2]
+    }
+  }
+  tfr.decr.final <- matrix(NA, nrow=T, ncol=meta$nr_countries, 
+                           dimnames=list(rownames(meta$tfr_matrix)[1:(T)],
+                                         colnames(meta$tfr_matrix)))
+  # constrain tfr.decr matrix to existence of covariate data using start.idx
+  # constrain to remove first obs to match DL.obs in mcmc_sampling (labeled as t+1)
+  for(country in 1:meta$nr_countries){
+    start.idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
+    idx <- start.idx:meta$lambda_c[country]
+    idx <- idx[-1]
+    tfr.decr.final[ ,country][idx] <- tfr.decr[ ,country][idx]
+  }
+  
+  meta$tfr_decr <- tfr.decr.final
+  return(meta)
+}
+
+# DAPHNE: 
+#    - added calls to covariate.meta.ini and decr.meta.ini
 mcmc.meta.ini <- function(...,
 						U.c.low,
 						start.year=1950, present.year=2020, 
@@ -270,6 +436,10 @@ mcmc.meta.ini <- function(...,
 						proposal_cov_gammas=proposal_cov_gammas, verbose=verbose, 
 						uncertainty=uncertainty, my.tfr.raw.file=my.tfr.raw.file, ar.phase2=ar.phase2, 
 						iso.unbiased=iso.unbiased, source.col.name = source.col.name)
+	# Daphne:
+	meta <- covariate.meta.ini(meta)
+	meta <- decr.meta.ini(meta)
+	
 	return(structure(c(mcmc.input, meta), class='bayesTFR.mcmc.meta'))
 }
 	
@@ -462,6 +632,8 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 
 # ini MCMC for UN estimates
 
+# DAPHNE
+#    - added initialization for covariates
 mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 					 S.ini=5, 
 					 a.ini=0, 
@@ -470,6 +642,13 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 					 const.ini=1, 				 
 					 gamma.ini=1, Triangle_c4.ini = 1.85,
 					 d.ini=0.17,
+					 # Daphne
+					 beta_e.ini=0, beta_fp.ini=0,
+					 beta_g.ini=0, 
+					 beta_e_SSA.ini=0, beta_fp_SSA.ini=0,
+					 beta_g_SSA.ini=0,
+					 bc_rho.ini = 0,
+					 # end Daphne
 					 save.all.parameters=FALSE,
 					 verbose=FALSE, uncertainty=FALSE, iso.unbiased=NULL,
 					 covariates=c('source', 'method'), cont_covariates=NULL, source.col.name = "source") {
@@ -530,6 +709,19 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
         	Triangle_c4[country] = max(mcmc.meta$Triangle_c4.low+0.0001, minf)
           }
     }
+   	
+   	#######################
+   	# Daphne: betas, bc_rho
+   	#######################
+   	beta_e <- beta_e.ini
+   	beta_fp <- beta_fp.ini
+   	beta_g <- beta_g.ini
+   	beta_e_SSA <- beta_e_SSA.ini
+   	beta_fp_SSA <- beta_fp_SSA.ini
+   	beta_g_SSA <- beta_g_SSA.ini
+   	bc_rho <- bc_rho.ini
+   	
+   	
    	dontsave.pars <- c('add_to_sd_Tc', 'const_sd_dummie_Tc', 'meta')
    	if(uncertainty) dontsave.pars <- c(dontsave.pars, 'meta3')
     if (!save.all.parameters) dontsave.pars <- c(dontsave.pars, 'eps_Tc')
@@ -544,6 +736,17 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
                         S_sd=S_sd, sigma0=sigma0,sd_eps_tau = sd_eps_tau, 
                         mean_eps_tau = mean_eps_tau,
                         d.ini=d.ini, gamma.ini=gamma.ini,Triangle_c4.ini=Triangle_c4.ini,
+						            # Daphne
+						            beta_e = beta_e, beta_fp = beta_fp, beta_g = beta_g,
+						            beta_e.ini = beta_e.ini, beta_fp.ini = beta_fp.ini,
+						            beta_g.ini = beta_g.ini,
+						            beta_e_SSA = beta_e_SSA, beta_fp_SSA = beta_fp_SSA,
+						            beta_g_SSA = beta_g_SSA,
+						            beta_e_SSA.ini = beta_e_SSA.ini, 
+						            beta_fp_SSA.ini = beta_fp_SSA.ini,
+						            beta_g_SSA.ini = beta_g_SSA.ini,
+						            bc_rho = bc_rho, bc_rho.ini = bc_rho.ini,
+						            # end Daphne
                         iter=iter, finished.iter=1, length = 1,
                         id=chain.id,
                         output.dir=paste0('mc', chain.id),
