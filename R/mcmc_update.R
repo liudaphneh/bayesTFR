@@ -1,3 +1,7 @@
+# DAPHNE:
+#    - added trace.sample for all default bayesTFR parameters for the conditional estimation of beta (20230903 DID NOT ACTUALLY ADD YET)
+#    - updated calls to get.eps.T to include beta
+#    - updated start indices to reflect start of covariate data
 
 mcmc.update.abS <- function(what, eps_Tc_temp, mcmc) {
   # 'what' is one of ('a', 'b', 'S')
@@ -170,7 +174,10 @@ mcmc.update.Triangle_c4 <- function(country, mcmc, ...) {
   Triangle_c4_trans <- log(max(mcmc$Triangle_c4[country] - mcmc$meta$Triangle_c4.low, 1e-20)/
                              max(mcmc$meta$Triangle_c4.up - mcmc$Triangle_c4[country], 1e-20))
 
-  epsT.idx <- mcmc$meta$start_c[country]:(mcmc$meta$lambda_c[country]-1)
+  # Daphne: changing indices to be after covariate data starts
+  start.idx <- max(mcmc$meta$start_c[country], mcmc$meta$start_cov_data_c[country])
+  epsT.idx <- start.idx:(mcmc$meta$lambda_c[country]-1)
+  # end Daphne
   # exclude indices with extreme epsT.idx
   raw.outliers <- mcmc$meta$indices.outliers[[as.character(country)]]
   if (!is.null(mcmc$meta$ar.phase2) && mcmc$meta$ar.phase2) 
@@ -206,7 +213,10 @@ mcmc.update.Triangle_c4 <- function(country, mcmc, ...) {
                        sum(exp(mcmc$gamma_ci[country,])), 
                      Triangle_c4_prop, 
                      mcmc$d_c[country])
-    eps_T_prop <- get.eps.T(theta_prop,country, mcmc$meta, ...)
+    # Daphne
+    beta_prop <- c(mcmc$beta_e, mcmc$beta_fp, mcmc$beta_g, mcmc$beta_e_SSA, mcmc$beta_fp_SSA, mcmc$beta_g_SSA)
+    eps_T_prop <- get.eps.T(theta_prop, beta_prop, country, mcmc$meta, ...)
+    # end Daphne
     like <- .C("log_cond_Triangle_c4_trans", Triangle_c4_trans_prop, eps_T_prop,
                mcmc$sd_Tc[epsT.idx,country],
                mcmc$mean_eps_Tc[epsT.idx,country], lepsT.idx, mcmc$Triangle4, mcmc$delta4,
@@ -248,9 +258,15 @@ mcmc.update.gamma <- function(country, mcmc, ...) {
   pci_prob <- exp(gamma_prop)/sum(exp(gamma_prop))
   theta_prop <- c(pci_prob*(mcmc$U_c[country] - mcmc$Triangle_c4[country]), 
                   mcmc$Triangle_c4[country], mcmc$d_c[country]) 
-  eps_T_prop <- get.eps.T(theta_prop, country, mcmc$meta, ...)
-
-  idx <- mcmc$meta$start_c[country]:(mcmc$meta$lambda_c[country]-1)
+  # Daphne
+  beta_prop <- c(mcmc$beta_e, mcmc$beta_fp, mcmc$beta_g, mcmc$beta_e_SSA, mcmc$beta_fp_SSA, mcmc$beta_g_SSA)
+  eps_T_prop <- get.eps.T(theta_prop, beta_prop, country, mcmc$meta, ...)
+  
+  # Daphne: changing indices to be after covariate data starts
+  start.idx <- max(mcmc$meta$start_c[country], mcmc$meta$start_cov_data_c[country])
+  idx <- start.idx:(mcmc$meta$lambda_c[country]-1)
+  # end Daphne
+  
   # exclude indices with extreme eps in idx
   raw.outliers <- mcmc$meta$indices.outliers[[as.character(country)]]
   if (!is.null(mcmc$meta$ar.phase2) && mcmc$meta$ar.phase2) 
@@ -278,7 +294,10 @@ mcmc.update.gamma <- function(country, mcmc, ...) {
 mcmc.update.d <- function(country, mcmc, ...) {
   # if accepted, update d_c and the distortions
   d_trans <- log((mcmc$d_c[country] - mcmc$meta$d.low)/(mcmc$meta$d.up - mcmc$d_c[country]))
-  idx <- mcmc$meta$start_c[country]:(mcmc$meta$lambda_c[country]-1)
+  # Daphne: changing indices to be after covariate data starts
+  start.idx <- max(mcmc$meta$start_c[country], mcmc$meta$start_cov_data_c[country])
+  idx <- start.idx:(mcmc$meta$lambda_c[country]-1)
+  # end Daphne
   # Exclude extreme indices in computing loglik
   raw.outliers <- mcmc$meta$indices.outliers[[as.character(country)]]
   if (!is.null(mcmc$meta$ar.phase2) && mcmc$meta$ar.phase2) 
@@ -305,7 +324,10 @@ mcmc.update.d <- function(country, mcmc, ...) {
   for(i in 1:50) {
     d_trans_prop <- runif(1,interval[1], interval[2])
     d_prop <- (mcmc$meta$d.up*exp(d_trans_prop) +mcmc$meta$d.low)/(1+exp(d_trans_prop))
-    eps_T_prop <- get.eps.T(c(theta_prop[-5], d_prop),country, mcmc$meta, ...)
+    # Daphne
+    beta_prop <- c(mcmc$beta_e, mcmc$beta_fp, mcmc$beta_g, mcmc$beta_e_SSA, mcmc$beta_fp_SSA, mcmc$beta_g_SSA)
+    eps_T_prop <- get.eps.T(c(theta_prop[-5], d_prop), beta_prop, country, mcmc$meta, ...)
+    # end Daphne
     if ((like <- log_cond_d_trans(d_trans_prop,eps_T_prop, 
                          mcmc$sd_Tc[idx, country],
                          mcmc$mean_eps_Tc[idx, country],
@@ -330,7 +352,10 @@ mcmc.update.d <- function(country, mcmc, ...) {
 
 
 mcmc.update.U <- function(country, mcmc, ...) {
-  idx <- mcmc$meta$start_c[country]:(mcmc$meta$lambda_c[country]-1)
+  # Daphne: changing indices to be after covariate data starts
+  start.idx <- max(mcmc$meta$start_c[country], mcmc$meta$start_cov_data_c[country])
+  idx <- start.idx:(mcmc$meta$lambda_c[country]-1)
+  # end Daphne
   # exclude those extreme indices in computing loglik
   raw.outliers <- mcmc$meta$indices.outliers[[as.character(country)]]
   if (!is.null(mcmc$meta$ar.phase2) && mcmc$meta$ar.phase2) 
@@ -358,7 +383,10 @@ mcmc.update.U <- function(country, mcmc, ...) {
     # keep proportions the same, just update the deltas
     theta_prop[1:3] <- theta_current[1:3]/(mcmc$U_c[country] - 
                                              mcmc$Triangle_c4[country])*(U_prop - mcmc$Triangle_c4[country])
-    eps_T_prop <- get.eps.T(theta_prop, country, mcmc$meta, ...)
+    # Daphne
+    beta_prop <- c(mcmc$beta_e, mcmc$beta_fp, mcmc$beta_g, mcmc$beta_e_SSA, mcmc$beta_fp_SSA, mcmc$beta_g_SSA)
+    eps_T_prop <- get.eps.T(theta_prop, beta_prop, country, mcmc$meta, ...)
+    # end Daphne
     if ((like <- log_cond_U(eps_T_prop, mcmc$sd_Tc[idx,country],
                    mcmc$mean_eps_Tc[idx,country])) >= z) {
       mcmc$eps_Tc[idx, country] <- eps_T_prop
