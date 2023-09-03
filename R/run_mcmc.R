@@ -26,6 +26,13 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 					 	sigma0.ini=NULL, Triangle_c4.ini=NULL, const.ini=NULL, gamma.ini=1, 
 						phase3.starting.values=NULL,
 					 	proposal_cov_gammas = NULL, # should be a list with elements 'values' and 'country_codes'
+						# Daphne
+						beta_e.ini=NULL, beta_fp.ini=NULL, 
+						beta_g.ini=NULL,
+						bc_rho.ini=NULL,
+						beta_e_SSA.ini=NULL, beta_fp_SSA.ini=NULL, 
+						beta_g_SSA.ini=NULL,
+						# end Daphne
 						iso.unbiased = NULL, covariates = c('source', 'method'), cont_covariates = NULL, 
 						source.col.name="source",
 					 	seed = NULL, parallel=FALSE, nr.nodes=nr.chains, 
@@ -80,6 +87,22 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 		const.ini <- ifelse(rep(nr.chains==1, nr.chains), 
 					 		(const.low+const.up)/2, 
 					 		seq(const.low, to=const.up, length=nr.chains))
+	# Daphne
+	if (missing(beta_e.ini) || is.null(beta_e.ini)) 
+	  beta_e.ini <- rep(0, nr.chains)
+	if (missing(beta_fp.ini) || is.null(beta_fp.ini)) 
+	  beta_fp.ini <- rep(0, nr.chains)
+	if (missing(beta_g.ini) || is.null(beta_g.ini)) 
+	  beta_g.ini <- rep(0, nr.chains)
+	if (missing(beta_e_SSA.ini) || is.null(beta_e_SSA.ini)) 
+	  beta_e_SSA.ini <- rep(0, nr.chains)
+	if (missing(beta_fp_SSA.ini) || is.null(beta_fp_SSA.ini)) 
+	  beta_fp_SSA.ini <- rep(0, nr.chains)
+	if (missing(beta_g_SSA.ini) || is.null(beta_g_SSA.ini)) 
+	  beta_g_SSA.ini <- rep(0, nr.chains)
+	if (missing(bc_rho.ini) || is.null(bc_rho.ini)) 
+	  bc_rho.ini <- rep(0, nr.chains)
+	# end Daphne
 	
 	bayesTFR.mcmc.meta <- mcmc.meta.ini(
 						nr.chains=nr.chains,
@@ -103,6 +126,12 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 					 	chi0=chi0, psi0=psi0, nu.psi0=nu.psi0,
 					 	alpha0.p = alpha0.p, delta0=delta0, nu.delta0=nu.delta0,
 					 	dl.p1=dl.p1, dl.p2=dl.p2, 
+						# Daphne
+						beta_e.ini=beta_e.ini, beta_fp.ini=beta_fp.ini, beta_g.ini=beta_g.ini,
+						bc_rho.ini=bc_rho.ini,
+						beta_e_SSA.ini=beta_e_SSA.ini, beta_fp_SSA.ini=beta_fp_SSA.ini, 
+						beta_g_SSA.ini=beta_g_SSA.ini,
+						# end Daphne
 					 	proposal_cov_gammas = proposal_cov_gammas,
 					 	buffer.size=buffer.size, compression.type=compression.type, 
 					 	auto.conf=auto.conf, package.version = packageVersion("bayesTFR"),
@@ -185,7 +214,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	}
 	
 	# propagate initial values for all chains if needed
-	for (var in c('S.ini', 'a.ini', 'b.ini', 'sigma0.ini', 'const.ini', 'gamma.ini', 'Triangle_c4.ini', 'iter')) {
+	# Daphne: added beta.ini, bc_rho.ini
+	for (var in c('S.ini', 'a.ini', 'b.ini', 'sigma0.ini', 'const.ini', 'gamma.ini', 'Triangle_c4.ini', 'beta_e.ini', 'beta_fp.ini', 'beta_g.ini', 'beta_e_SSA.ini', 'beta_fp_SSA.ini', 'beta_g_SSA.ini',  'bc_rho.ini', 'iter')) {
 		if (length(get(var)) < nr.chains) {
 			if (length(get(var)) == 1) {
 				assign(var, rep(get(var), nr.chains))
@@ -201,6 +231,12 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						initfun=init.nodes, seed = seed, meta=bayesTFR.mcmc.meta, 
 						thin=thin, starting.values=starting.values, iter=iter, S.ini=S.ini, a.ini=a.ini,
 						b.ini=b.ini, sigma0.ini=sigma0.ini, Triangle_c4.ini=Triangle_c4.ini, const.ini=const.ini,
+						# Daphne
+						beta_e.ini=beta_e.ini, beta_fp.ini=beta_fp.ini, beta_g.ini=beta_g.ini,
+						beta_e_SSA.ini=beta_e_SSA.ini, beta_fp_SSA.ini=beta_fp_SSA.ini,
+						beta_g_SSA.ini=beta_g_SSA.ini,
+						bc_rho.ini=bc_rho.ini,
+						# end Daphne
 						gamma.ini=gamma.ini, save.all.parameters=save.all.parameters, verbose=verbose, 
 						verbose.iter=verbose.iter, uncertainty=uncertainty, iso.unbiased=iso.unbiased, 
 						covariates=covariates, cont_covariates=cont_covariates, source.col.name=source.col.name, ...)
@@ -210,6 +246,12 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 			chain.set[[chain]] <- mcmc.run.chain(chain, bayesTFR.mcmc.meta, thin=thin, starting.values=starting.values, 
 					 	iter=iter, S.ini=S.ini, a.ini=a.ini, b.ini=b.ini, 
 					 	sigma0.ini=sigma0.ini, Triangle_c4.ini=Triangle_c4.ini, const.ini=const.ini, 
+					 	# Daphne
+					 	beta_e.ini=beta_e.ini, beta_fp.ini=beta_fp.ini, beta_g.ini=beta_g.ini,
+					 	beta_e_SSA.ini=beta_e_SSA.ini, beta_fp_SSA.ini=beta_fp_SSA.ini,
+					 	beta_g_SSA.ini=beta_g_SSA.ini,
+					 	bc_rho.ini=bc_rho.ini,
+					 	# end Daphne
 					 	gamma.ini=gamma.ini, save.all.parameters=save.all.parameters,
 					 	verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty, iso.unbiased=iso.unbiased, 
 					 	covariates=covariates, cont_covariates=cont_covariates, source.col.name=source.col.name)
@@ -241,7 +283,13 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 
 
 mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NULL, 
-							S.ini, a.ini, b.ini, sigma0.ini, Triangle_c4.ini, const.ini, gamma.ini=1,
+							S.ini, a.ini, b.ini, sigma0.ini, Triangle_c4.ini, const.ini,
+							# Daphne
+							beta_e.ini, beta_fp.ini, beta_g.ini,
+							beta_e_SSA.ini, beta_fp_SSA.ini, beta_g_SSA.ini,
+							bc_rho.ini,
+							# end Daphne
+							gamma.ini=1,
 							save.all.parameters=FALSE,
 							verbose=FALSE, verbose.iter=10, uncertainty=FALSE, iso.unbiased=NULL, 
 							covariates=c('source', 'method'), cont_covariates=NULL, source.col.name="source") {
@@ -251,8 +299,16 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
     	cat('************\n')
     	cat('Starting values:\n')
     	sv <- c(S.ini[chain.id], a.ini[chain.id], b.ini[chain.id], sigma0.ini[chain.id], Triangle_c4.ini[chain.id],
-    			const.ini[chain.id], gamma.ini[chain.id])
-    	names(sv) <- c('S', 'a', 'b', 'sigma0', 'Triangle_c4', 'const', 'gamma')
+    			const.ini[chain.id], 
+    			# Daphne
+    			beta_e.ini[chain.id], beta_fp.ini[chain.id], beta_g.ini[chain.id],
+    			beta_e_SSA.ini[chain.id], beta_fp_SSA.ini[chain.id], beta_g_SSA.ini[chain.id],
+    			bc_rho.ini[chain.id],
+    			# end Daphne
+    			gamma.ini[chain.id]
+    			)
+    	# Daphne: added beta, bc_rho
+    	names(sv) <- c('S', 'a', 'b', 'sigma0', 'Triangle_c4', 'const', 'beta_e', 'beta_fp', 'beta_g', 'beta_e_SSA', 'beta_fp_SSA', 'beta_g_SSA', 'bc_rho', 'gamma')
     	print(sv)
     }
   
@@ -263,7 +319,16 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
 	                 sigma0.ini=sigma0.ini[chain.id],
 	                 Triangle_c4.ini=Triangle_c4.ini[chain.id],
 	                 const.ini=const.ini[chain.id],
-	                 gamma.ini=gamma.ini[chain.id],
+                   # Daphne
+                   beta_e.ini=beta_e.ini[chain.id], 
+                   beta_fp.ini=beta_fp.ini[chain.id],
+                   beta_g.ini=beta_g.ini[chain.id],
+                   beta_e_SSA.ini=beta_e_SSA.ini[chain.id], 
+                   beta_fp_SSA.ini=beta_fp_SSA.ini[chain.id],
+                   beta_g_SSA.ini=beta_g_SSA.ini[chain.id],
+                   bc_rho.ini=bc_rho.ini[chain.id],
+                   # end Daphne
+                   gamma.ini=gamma.ini[chain.id],
 	                 save.all.parameters=save.all.parameters,
 	                 verbose=verbose, uncertainty=uncertainty, iso.unbiased=iso.unbiased, 
 	                 covariates=covariates, cont_covariates=cont_covariates,
