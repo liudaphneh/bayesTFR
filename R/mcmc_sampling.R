@@ -261,53 +261,53 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 	# initialize acceptance rate counter variables
 	rho.n.iter <- 0
 	rho.accept <- 0
-	
+
 	############ DAPHNE: load parameter traces from default run of bayesTFR ############
 	# beta's are sampled conditionally on all other parameters in bayesTFR
 	# so in this step, we load in the parameter traces from a converged run of default (unconditional) bayesTFR
-	# 20230903 testing: we won't do this yet since we're just testing if the mcmc_ini etc. code changes work
 	# (requires m.default to be an object in the environment... maybe should initialize this somehow)
-	# m.default.burnin <- 20000
-	# mean_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("mean_eps_tau"), 
-	#                                                 burnin = m.default.burnin)
-	# sd_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("sd_eps_tau"), 
-	#                                               burnin = m.default.burnin)
-	# chi.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("chi"), burnin = m.default.burnin)
-	# psi.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("psi"), burnin = m.default.burnin)
-	# Triangle4.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("Triangle4"), 
-	#                                              burnin = m.default.burnin)
-	# delta4.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("delta4"), 
-	#                                           burnin = m.default.burnin)
-	# alpha.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("alpha"), 
-	#                                          burnin = m.default.burnin)
-	# delta.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("delta"), 
-	#                                          burnin = m.default.burnin)
-	# 
-	# # sample once from parameter traces for whole iter
-	# iter.sample <- sample(1:nrow(delta.traces), size = nr_simu-start.iter+1, replace = TRUE)
-	# 
-	# # for country-specific parameters, store samples as list, each country is separate element
-	# d.samples <- list()
-	# gamma.samples <- list()
-	# Trianglec4.samples <- list()
-	# U.samples <- list()
-	# for (country in id_DL_all){
-	#   country.i.obj <- get.country.object(country, meta = m.twostage$meta, index = TRUE)
-	#   country.traces <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = country.i.obj, par.names = c("d", "gamma", "Triangle_c4"), burnin = m.default.burnin)
-	#   d.samples[[country]] <- country.traces[iter.sample,1]
-	#   gamma.samples[[country]] <- country.traces[iter.sample, c(2,3,4)]
-	#   Trianglec4.samples[[country]] <- country.traces[iter.sample,5]
-	#   U.samples[[country]] <- get.tfr.parameter.traces.cs(m.default.new$mcmc.list, country.obj = country.i.obj, par.names = "U", burnin = m.default.burnin)[iter.sample]
-	# }
-	#### end Daphne ####
+	#m.default.burnin <- 20000
+	m.default.burnin <- 5
+	mean_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("mean_eps_tau"),
+	                                                burnin = m.default.burnin)
+	sd_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("sd_eps_tau"),
+	                                              burnin = m.default.burnin)
+	chi.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("chi"), burnin = m.default.burnin)
+	psi.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("psi"), burnin = m.default.burnin)
+	Triangle4.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("Triangle4"),
+	                                             burnin = m.default.burnin)
+	delta4.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("delta4"),
+	                                          burnin = m.default.burnin)
+	alpha.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("alpha"),
+	                                         burnin = m.default.burnin)
+	delta.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("delta"),
+	                                         burnin = m.default.burnin)
+
+	# sample once from parameter traces for whole iter
+	iter.sample <- sample(1:nrow(delta.traces), size = nr_simu-start.iter+1, replace = TRUE)
+
+	# for country-specific parameters, store samples as list, each country is separate element
+	d.samples <- list()
+	gamma.samples <- list()
+	Trianglec4.samples <- list()
+	U.samples <- list()
+	for (country in id_DL_all){
+	  country.i.obj <- get.country.object(country, meta = m.default$meta, index = TRUE)
+	  country.traces <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = country.i.obj, par.names = c("d", "gamma", "Triangle_c4"), burnin = m.default.burnin)
+	  d.samples[[country]] <- country.traces[iter.sample,1]
+	  gamma.samples[[country]] <- country.traces[iter.sample, c(2,3,4)]
+	  Trianglec4.samples[[country]] <- country.traces[iter.sample,5]
+	  U.samples[[country]] <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = country.i.obj, par.names = "U", burnin = m.default.burnin)[iter.sample]
+	}
 	
+	# MCMC sampling steps for default bayesTFR parameters have all been modified to be conditional sampling based on parameter traces from m.default
   ################################################################### 
-    # Start MCMC
+  # Start MCMC
 	############
 	  for (simu in start.iter:nr_simu) {
-	    # DAPHNE: index for iter.sample (20230903 not used yet)
-	    #iter.idx <- simu - start.iter + 1
-	    
+	    # DAPHNE: index for iter.sample 
+	    iter.idx <- simu - start.iter + 1
+
 	    if(verbose.iter > 0 && (simu %% verbose.iter == 0))
         	cat('\nIteration:', simu, '--', date())
         unblock.gtk('bDem.TFRmcmc')
@@ -317,19 +317,23 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
         # updates sd_Tc
         # start with this to get the right sd_Tc in the next steps!!
         
-        mcmc.update.abSsigma0const(mcenv, idx.tau_c.id.notearly)
+        mcmc.update.abSsigma0const(mcenv, idx.tau_c.id.notearly, iter.sample[iter.idx])
 
        #################################################################### 
         # 2. mean_eps_tau sd_eps_tau: gibbs step
         ##################################################################
 
-        eps_taus <- mcenv$eps_Tc[idx.tau_c.id.notearly] # only for estimation countries
-        mcenv$mean_eps_tau <- rnorm(1, mean = (sum(eps_taus)/(mcenv$sd_eps_tau^2) +
-                        mean_eps_tau_0/(sd_eps_tau_0^2))/
-                        (1/sd_eps_tau_0^2 + nr_notearly/(mcenv$sd_eps_tau^2)),
-                             sd = 1/sqrt(1/sd_eps_tau_0^2 + nr_notearly/(mcenv$sd_eps_tau^2)) )
-        sum_dt2 = sum(  (eps_taus - mcenv$mean_eps_tau)^2)
-        mcenv$sd_eps_tau <- sqrt(1/rgamma(1,nu_tauD/2, rate = 1/2*(prod_tau0 + sum_dt2)))
+        # eps_taus <- mcenv$eps_Tc[idx.tau_c.id.notearly] # only for estimation countries
+        # mcenv$mean_eps_tau <- rnorm(1, mean = (sum(eps_taus)/(mcenv$sd_eps_tau^2) +
+        #                 mean_eps_tau_0/(sd_eps_tau_0^2))/
+        #                 (1/sd_eps_tau_0^2 + nr_notearly/(mcenv$sd_eps_tau^2)),
+        #                      sd = 1/sqrt(1/sd_eps_tau_0^2 + nr_notearly/(mcenv$sd_eps_tau^2)) )
+        # sum_dt2 = sum(  (eps_taus - mcenv$mean_eps_tau)^2)
+        # mcenv$sd_eps_tau <- sqrt(1/rgamma(1,nu_tauD/2, rate = 1/2*(prod_tau0 + sum_dt2)))
+        
+        # conditional:
+        mcenv$mean_eps_tau <- mean_eps_tau.traces[iter.sample[iter.idx]]
+        mcenv$sd_eps_tau <- sd_eps_tau.traces[iter.sample[iter.idx]]
 
  		#update all not-early countries
 		mcenv$sd_Tc[idx.tau_c.id.notearly.all] <- mcenv$sd_eps_tau
@@ -338,78 +342,126 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
         # 2. chi's and psi's: gibbs step
         ##################################################################
         # this is phi_c, the logit transformed d_c's
-        d_transformed_declinecountries <- 
-                        log((mcenv$d_c[id_DL] - lower_d)/(
-                                upper_d-mcenv$d_c[id_DL])) 
-        mcenv$chi <- rnorm(1, mean = (sum(d_transformed_declinecountries)/(mcenv$psi^2) +chi0/(psi0^2))/(1/psi0^2 + nr_DL/(mcenv$psi^2)),
-                             sd = 1/sqrt(1/psi0^2 + nr_DL/(mcenv$psi^2)))
-        sum_dt2 = sum(  (d_transformed_declinecountries - mcenv$chi)^2)
-        mcenv$psi <- sqrt(1/rgamma(1,nu_psiD/2, rate = 1/2*(prod_psi0 + sum_dt2)))
+        # d_transformed_declinecountries <- 
+        #                 log((mcenv$d_c[id_DL] - lower_d)/(
+        #                         upper_d-mcenv$d_c[id_DL])) 
+        # mcenv$chi <- rnorm(1, mean = (sum(d_transformed_declinecountries)/(mcenv$psi^2) +chi0/(psi0^2))/(1/psi0^2 + nr_DL/(mcenv$psi^2)),
+        #                      sd = 1/sqrt(1/psi0^2 + nr_DL/(mcenv$psi^2)))
+        # sum_dt2 = sum(  (d_transformed_declinecountries - mcenv$chi)^2)
+        # mcenv$psi <- sqrt(1/rgamma(1,nu_psiD/2, rate = 1/2*(prod_psi0 + sum_dt2)))
+		
+		    # conditional:
+		    mcenv$chi <- chi.traces[iter.sample[iter.idx]]
+		    mcenv$psi <- psi.traces[iter.sample[iter.idx]]
 
         #################################################################### 
         # 2. Triangle4 and delta4_star: gibbs step
         ##################################################################
-        # logit transformed Triangle_c4's
-        delta4.squared <- mcenv$delta4^2
-        delta4.0.squared <- delta4_0^2
-        Triangle_c4_transformed <- 
-                        log(pmax(mcenv$Triangle_c4[id_DL] - Triangle_c4.low, 1e-10)/
-                                        (Triangle_c4.up-mcenv$Triangle_c4[id_DL])) 
-        mcenv$Triangle4 <- rnorm(1, mean = (sum(Triangle_c4_transformed)/(delta4.squared) + 
-        										Triangle4_0/delta4.0.squared)/
-                                                  (1/delta4.0.squared + nr_DL/(delta4.squared)),
-                             sd = 1/sqrt(1/delta4.0.squared + nr_DL/delta4.squared))
-
-        sum_dt2 = sum(  (Triangle_c4_transformed - mcenv$Triangle4)^2)
-        mcenv$delta4 <- sqrt(1/rgamma(1,nu4_D/2, rate = 1/2*(prod_delta4_0 + sum_dt2)))
+        # # logit transformed Triangle_c4's
+        # delta4.squared <- mcenv$delta4^2
+        # delta4.0.squared <- delta4_0^2
+        # Triangle_c4_transformed <- 
+        #                 log(pmax(mcenv$Triangle_c4[id_DL] - Triangle_c4.low, 1e-10)/
+        #                                 (Triangle_c4.up-mcenv$Triangle_c4[id_DL])) 
+        # mcenv$Triangle4 <- rnorm(1, mean = (sum(Triangle_c4_transformed)/(delta4.squared) + 
+        # 										Triangle4_0/delta4.0.squared)/
+        #                                           (1/delta4.0.squared + nr_DL/(delta4.squared)),
+        #                      sd = 1/sqrt(1/delta4.0.squared + nr_DL/delta4.squared))
+        # 
+        # sum_dt2 = sum(  (Triangle_c4_transformed - mcenv$Triangle4)^2)
+        # mcenv$delta4 <- sqrt(1/rgamma(1,nu4_D/2, rate = 1/2*(prod_delta4_0 + sum_dt2)))
+		    
+		    # conditional:
+		    mcenv$Triangle4 <- Triangle4.traces[iter.sample[iter.idx]]
+		    mcenv$delta4 <- delta4.traces[iter.sample[iter.idx]]
 
         if (!is.null(mcenv$meta$ar.phase2) && mcenv$meta$ar.phase2)
         {
-          mcmc.update.rho.phase2(mcenv, matrix.name=matrix.name)
+          mcmc.update.rho.phase2(mcenv, matrix.name=matrix.name, iter.sample[iter.idx])
           # mcenv$rho.phase2 <- 0.7
         }
         #################################################################### 
         # country-specific parameters: d_c, gamma's, U_c and Triangle_c4
         ##################################################################
-        
+		    beta_prop <- c(mcenv$beta_e, mcenv$beta_fp, mcenv$beta_g, 
+		                   mcenv$beta_e_SSA, mcenv$beta_fp_SSA, mcenv$beta_g_SSA)
         for (country in id_DL_all){
-                mcmc.update.d(country, mcenv, matrix.name=matrix.name, rho.phase2=mcenv$rho.phase2)
-                mcmc.update.gamma(country, mcenv, matrix.name=matrix.name, rho.phase2=mcenv$rho.phase2)
-                mcmc.update.Triangle_c4(country, mcenv, matrix.name=matrix.name, rho.phase2=mcenv$rho.phase2)
-                #print(c(country, mcmc$Triangle_c4[country]))
+          start_idx <- max(mcenv$meta$start_c[country], mcenv$meta$start_cov_data_c[country])
+          idx <- start_idx:(mcenv$meta$lambda_c[country]-1)
+          
+          ##### D
+          #mcmc.update.d(country, mcenv, matrix.name=matrix.name, rho.phase2=mcenv$rho.phase2)
+          theta_prop <-  c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
+          d_prop <- d.samples[[country]][iter.idx]
+          eps_T_prop <- get.eps.T(c(theta_prop[-5], d_prop), beta_prop, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          
+          mcenv$eps_Tc[idx, country] <- eps_T_prop
+          mcenv$d_c[country] <- d_prop
+
+          ##### GAMMA
+          #mcmc.update.gamma(country, mcenv, matrix.name=matrix.name, rho.phase2=mcenv$rho.phase2)
+          gamma_prop <- gamma.samples[[country]][iter.idx, ]
+          pci_prob <- exp(gamma_prop)/sum(exp(gamma_prop))
+          theta_prop <- c(pci_prob*(mcenv$U_c[country] - mcenv$Triangle_c4[country]), 
+                          mcenv$Triangle_c4[country], mcenv$d_c[country]) 
+          eps_T_prop <- get.eps.T(theta_prop, beta_prop, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          
+          mcenv$gamma_ci[country,] <- gamma_prop
+          mcenv$eps_Tc[idx, country] <- eps_T_prop
+          
+          ##### TRIANGLEC4
+          #mcmc.update.Triangle_c4(country, mcenv, matrix.name=matrix.name, rho.phase2=mcenv$rho.phase2)
+          Triangle_c4_prop <- Trianglec4.samples[[country]][iter.idx]
+          theta_prop <-  c((mcenv$U_c[country]-Triangle_c4_prop)*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), Triangle_c4_prop, mcenv$d_c[country])
+          eps_T_prop <- get.eps.T(theta_prop, beta_prop, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          mcenv$eps_Tc[idx, country] <- eps_T_prop
+          mcenv$Triangle_c4[country] <- Triangle_c4_prop
         }
         
          # U_c updated only for countries with early decline
          for (country in id_early_all){
-                mcmc.update.U(country, mcenv, matrix.name=matrix.name, rho.phase2=mcenv$rho.phase2)
+           #mcmc.update.U(country, mcenv, matrix.name=matrix.name, rho.phase2=mcenv$rho.phase2)
+           start_idx <- max(mcenv$meta$start_c[country], 
+                            mcenv$meta$start_cov_data_c[country])
+           theta_prop <-  c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
+           U_prop <- U.samples[[country]][iter.idx]
+           theta_prop[1:3] <- theta_prop[1:3]/(mcenv$U_c[country] - mcenv$Triangle_c4[country])*(U_prop - mcenv$Triangle_c4[country])
+           eps_T_prop <- get.eps.T(theta_prop, beta_prop, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+           
+           mcenv$eps_Tc[start_idx:(mcenv$meta$lambda_c[country]-1), country] <- eps_T_prop
+           mcenv$U_c[country] <- U_prop
          } 
 
          ##################################################################
          #mcenv# alpha_i's and delta_i's, with gibbs step
          ##################################################################
 
-         mcenv$alpha <- rnorm(3, mean = (apply(mcenv$gamma_ci[id_DL,], 2, sum)/(mcenv$delta^2) + 
-         										mcenv$meta$alpha0.p/(mcenv$meta$delta0^2))/
-                                                        (1/(mcenv$meta$delta0^2) + nr_DL/(mcenv$delta^2)),
-                                sd = 1/sqrt(1/(mcenv$meta$delta0^2) + nr_DL/(mcenv$delta^2)))
-
-         sum_gammas <- apply( (mcenv$gamma_ci[id_DL,] - t(ones*mcenv$alpha) )^2, 2, sum)
-         mcenv$delta <- sqrt(1/rgamma(3,a_delta , rate = 1/2*(prod_delta0 + sum_gammas) ) )
-         
+         # mcenv$alpha <- rnorm(3, mean = (apply(mcenv$gamma_ci[id_DL,], 2, sum)/(mcenv$delta^2) + 
+         # 										mcenv$meta$alpha0.p/(mcenv$meta$delta0^2))/
+         #                                                (1/(mcenv$meta$delta0^2) + nr_DL/(mcenv$delta^2)),
+         #                        sd = 1/sqrt(1/(mcenv$meta$delta0^2) + nr_DL/(mcenv$delta^2)))
+         # 
+         # sum_gammas <- apply( (mcenv$gamma_ci[id_DL,] - t(ones*mcenv$alpha) )^2, 2, sum)
+         # mcenv$delta <- sqrt(1/rgamma(3,a_delta , rate = 1/2*(prod_delta0 + sum_gammas) ) )
+		    
+		     # conditional:
+		     mcenv$alpha <- alpha.traces[iter.sample[iter.idx], ]
+		     mcenv$delta <- delta.traces[iter.sample[iter.idx], ]
+         browser()
          ##################################################################
          # DAPHNE: bc_rho, beta
          ##################################################################
-         #### compute outcome variable Y = TFR Decr + DL ####
+         #### compute outcome Y = TFR Decr + DL ####
          # using current TFR to compute DL
-         Y.matrix <- matrix(nrow = nrow(mcenv$meta$tfr_decr), ncol = ncol(mcenv$meta$tfr_decr))
-         rownames(Y.matrix) <- rownames(mcenv$meta$tfr_decr)
-         colnames(Y.matrix) <- colnames(mcenv$meta$tfr_decr)
+         Y.matrix <- matrix(nrow = nrow(mcenv$meta$tfr_matrix), ncol = ncol(mcenv$meta$tfr_decr))
+         rownames(Y.matrix) <- rownames(mcenv$meta$tfr_matrix)
+         colnames(Y.matrix) <- colnames(mcenv$meta$tfr_matrix)
          
          for(country in 1:ncol(Y.matrix)){
            # vector of observed non-NA TFR values
            # if have NAs, then start of Phase II will be earlier than start of covariate data
-           start.idx <- max(mcenv$meta$start_c[country], mcenv$meta$start_cov_data_c[country])
-           tfr.vctr <- get.observed.tfr(country, mcenv$meta, matrix.name = 'tfr_matrix')[start.idx:mcenv$meta$lambda_c[country]]
+           start_idx <- max(mcenv$meta$start_c[country], mcenv$meta$start_cov_data_c[country])
+           tfr.vctr <- get.observed.tfr(country, mcenv$meta)[start_idx:mcenv$meta$lambda_c[country]] # matrix = matrix.name?
            ldl <- length(tfr.vctr)-1
            
            # expected decrements for the observed TFR
@@ -418,7 +470,7 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
            names(DL.obs) <- names(tfr.vctr)[2:(ldl+1)]
            
            # vector of TFR Decr
-           tfr.decr.vctr <- mcenv$meta$tfr_decr[ ,country]
+           tfr.decr.vctr <- get.decr(country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
            tfr.decr.vctr <- tfr.decr.vctr[!is.na(tfr.decr.vctr)]
            tfr.decr.obs.years <- names(tfr.decr.vctr)
            obs.years <- intersect(names(DL.obs), tfr.decr.obs.years)
@@ -492,13 +544,14 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
          mcenv$beta_g_SSA <- mv.sample[6]
          
          # update eps_T after all parameters are estimated for this iter
+         # !!! needs to be updated for uncertainty??? add ... arguments to get.eps.T
          beta_for_eps_T <- c(mcenv$beta_e, mcenv$beta_fp, mcenv$beta_g, 
                              mcenv$beta_e_SSA, mcenv$beta_fp_SSA, mcenv$beta_g_SSA)
          for(country in id_DL_all){
            theta_for_eps_T <-  c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
            
-           start.idx <- max(mcenv$meta$start_c[country], mcenv$meta$start_cov_data_c[country])
-           mcenv$eps_Tc[start.idx:(mcenv$meta$lambda_c[country]-1), country] <- get.eps.T(theta_for_eps_T, beta_for_eps_T, country, mcenv$meta)
+           start_idx <- max(mcenv$meta$start_c[country], mcenv$meta$start_cov_data_c[country])
+           mcenv$eps_Tc[start_idx:(mcenv$meta$lambda_c[country]-1), country] <- get.eps.T(theta_for_eps_T, beta_for_eps_T, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
          }
          
 
