@@ -1,9 +1,11 @@
 # DAPHNE:
-#    - added trace.sample for all default bayesTFR parameters for the conditional estimation of beta (20230903 DID NOT ACTUALLY ADD YET)
+#    - commented out most sampling steps and replaced with get.parameter.traces for functions involved in mcmc.update.abSsigma0const and mcmc.update.rho.phase2 for conditional sampling of beta
+#    - added trace.sample as argument to functions involved in mcmc.update.abSsigma0const and mcmc.update.rho.phase2
 #    - updated calls to get.eps.T to include beta
 #    - updated start indices to reflect start of covariate data
+#    - (note that for conditional bayesTFR, most of these functions are not called)
 
-mcmc.update.abS <- function(what, eps_Tc_temp, mcmc) {
+mcmc.update.abS <- function(what, eps_Tc_temp, mcmc, trace.sample) {
   # 'what' is one of ('a', 'b', 'S')
   var.index <- (1:3)[what == c('a', 'b', 'S')]
   abS.values <- list(a=mcmc$a_sd, b=mcmc$b_sd, S=mcmc$S_sd)
@@ -19,12 +21,12 @@ mcmc.update.abS <- function(what, eps_Tc_temp, mcmc) {
   # the new estimate is found within interval around current estimate
   ##############################################################
   
-  z <- log_cond_abf_sd(mcmc$add_to_sd_Tc, mcmc$const_sd, mcmc$sigma0, eps_Tc_temp, 
-                       mcmc$const_sd_dummie_Tc, mcmc$meta$sigma0.min) - rexp(1)
-  # if (what == 'a') cat(mcmc$finished.iter, ":", z, "a:", mcmc$a_sd, "\n")
-  v <- runif(1)   
-  interval <- c(max(var.value - v*var.width, var.low),
-                min(var.value + (1-v)*var.width,var.up))
+  # z <- log_cond_abf_sd(mcmc$add_to_sd_Tc, mcmc$const_sd, mcmc$sigma0, eps_Tc_temp, 
+  #                      mcmc$const_sd_dummie_Tc, mcmc$meta$sigma0.min) - rexp(1)
+  # # if (what == 'a') cat(mcmc$finished.iter, ":", z, "a:", mcmc$a_sd, "\n")
+  # v <- runif(1)   
+  # interval <- c(max(var.value - v*var.width, var.low),
+  #               min(var.value + (1-v)*var.width,var.up))
   
   add_to_sd_Tc_prop <- matrix(NA, nrow(mcmc$add_to_sd_Tc), ncol(mcmc$add_to_sd_Tc))
   for (country in 1:mcmc$meta$nr_countries){
@@ -32,38 +34,39 @@ mcmc.update.abS <- function(what, eps_Tc_temp, mcmc) {
       ifelse(mcmc$data.list[[country]] > abS.values$S, 
              -abS.values$a, abS.values$b)
   }  
-  #while (TRUE){
-  for(i in 1:50) {
-    var_prop <- runif(1,interval[1], interval[2])
+  ##while (TRUE){
+  #for(i in 1:50) {
+  #  var_prop <- runif(1,interval[1], interval[2])
+    var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, par.names = var.name, burnin = 0)[trace.sample]
     abS.values[[what]] <- var_prop
     for (country in 1:mcmc$meta$nr_countries){
       add_to_sd_Tc_prop[1:length(mcmc$data.list[[country]]), country] <- (mcmc$data.list[[country]] - abS.values$S)*
         ifelse(mcmc$data.list[[country]] > abS.values$S, 
                -abS.values$a, abS.values$b)
     }  
-    like <- log_cond_abf_sd(add_to_sd_Tc_prop, mcmc$const_sd, mcmc$sigma0, eps_Tc_temp, 
-                            mcmc$const_sd_dummie_Tc, mcmc$meta$sigma0.min)     
-    if (like >= z) {
-      mcmc[[var.name]] <- var_prop
-      mcmc$add_to_sd_Tc <- add_to_sd_Tc_prop
-      return()
-    } else {
-      # shrink interval
-      if (var_prop < var.value){
-        interval[1] <- var_prop
-      } else {
-        interval[2] <- var_prop
-      }
-      if(abs(interval[1]-interval[2]) < 1e-10) break
-    } # end else
-  }
+  #   like <- log_cond_abf_sd(add_to_sd_Tc_prop, mcmc$const_sd, mcmc$sigma0, eps_Tc_temp, 
+  #                           mcmc$const_sd_dummie_Tc, mcmc$meta$sigma0.min)     
+  #   if (like >= z) {
+  #     mcmc[[var.name]] <- var_prop
+  #     mcmc$add_to_sd_Tc <- add_to_sd_Tc_prop
+  #     return()
+  #   } else {
+  #     # shrink interval
+  #     if (var_prop < var.value){
+  #       interval[1] <- var_prop
+  #     } else {
+  #       interval[2] <- var_prop
+  #     }
+  #     if(abs(interval[1]-interval[2]) < 1e-10) break
+  #   } # end else
+  # }
   mcmc[[var.name]] <- var_prop
   mcmc$add_to_sd_Tc <- add_to_sd_Tc_prop
-  warning("Cannot find likelihood increase for ", what, ".\n Final interval: [", interval[1], ',', interval[2], ']\n',
-          "New likelihood: ", like, ", original likelihood: ", z, immediate. = TRUE)
+  # warning("Cannot find likelihood increase for ", what, ".\n Final interval: [", interval[1], ',', interval[2], ']\n',
+  #         "New likelihood: ", like, ", original likelihood: ", z, immediate. = TRUE)
 }
 
-mcmc.update.sigma0const <- function(what, log.like.func, eps_Tc_temp, mcmc) {
+mcmc.update.sigma0const <- function(what, log.like.func, eps_Tc_temp, mcmc, trace.sample) {
   # 'what' is one of ('sigma0', 'const')
   var.index <- (1:2)[what == c('sigma0', 'const')]
   var.values <- list(sigma0=mcmc$sigma0, const=mcmc$const_sd)
@@ -73,72 +76,74 @@ mcmc.update.sigma0const <- function(what, log.like.func, eps_Tc_temp, mcmc) {
   var.up <- mcmc$meta[[paste(what, 'up', sep='.')]]
   var.width <- mcmc$meta[[paste(what, 'width', sep='.')]]
   
-  z <- eval(call(log.like.func, mcmc$add_to_sd_Tc, var.values[['const']], var.values[['sigma0']], 
-                 eps_Tc_temp, mcmc$const_sd_dummie_Tc, mcmc$meta$sigma0.min)) - rexp(1)
-  v <- runif(1)
-  interval <- c(max(var.value - v*var.width, var.low),
-                min(var.value + (1-v)*var.width,var.up))
+  # z <- eval(call(log.like.func, mcmc$add_to_sd_Tc, var.values[['const']], var.values[['sigma0']], 
+  #                eps_Tc_temp, mcmc$const_sd_dummie_Tc, mcmc$meta$sigma0.min)) - rexp(1)
+  # v <- runif(1)
+  # interval <- c(max(var.value - v*var.width, var.low),
+  #               min(var.value + (1-v)*var.width,var.up))
   
   #while (TRUE){
-  for(i in 1:50) {
-    var_prop <- runif(1,interval[1], interval[2])
+  #for(i in 1:50) {
+    #var_prop <- runif(1,interval[1], interval[2])
+    var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, par.names = var.name, burnin = 0)[trace.sample]
     var.values[[what]] <- var_prop
-    like <- eval(call(log.like.func, mcmc$add_to_sd_Tc, var.values[['const']], var.values[['sigma0']], 
-                      eps_Tc_temp, mcmc$const_sd_dummie_Tc, mcmc$meta$sigma0.min))
-    if (like >= z) {
-      mcmc[[var.name]] <- var_prop
-      return()
-    } else {
-      # shrink interval
-      if (var_prop < var.value){
-        interval[1] <- var_prop
-      } else {
-        interval[2] <- var_prop
-      }
-      if(abs(interval[1]-interval[2]) < 1e-10) break
-    } # end else
-  }
+  #   like <- eval(call(log.like.func, mcmc$add_to_sd_Tc, var.values[['const']], var.values[['sigma0']], 
+  #                     eps_Tc_temp, mcmc$const_sd_dummie_Tc, mcmc$meta$sigma0.min))
+  #   if (like >= z) {
+  #     mcmc[[var.name]] <- var_prop
+  #     return()
+  #   } else {
+  #     # shrink interval
+  #     if (var_prop < var.value){
+  #       interval[1] <- var_prop
+  #     } else {
+  #       interval[2] <- var_prop
+  #     }
+  #     if(abs(interval[1]-interval[2]) < 1e-10) break
+  #   } # end else
+  # }
   mcmc[[var.name]] <- var_prop
-  warning("Cannot find likelihood increase for ", what, ".\n Final interval: [", interval[1], ',', interval[2], ']\n',
-          "New likelihood: ", like, ", original likelihood: ", z, immediate.=TRUE)
+  # warning("Cannot find likelihood increase for ", what, ".\n Final interval: [", interval[1], ',', interval[2], ']\n',
+  #         "New likelihood: ", like, ", original likelihood: ", z, immediate.=TRUE)
 }
 
-mcmc.update.rho.phase2 <- function(mcmc, matrix.name) {
+mcmc.update.rho.phase2 <- function(mcmc, matrix.name, trace.sample) {
   var.value <- mcmc$rho.phase2
   var.low <- 0
   var.up <- 0.9
   var.width <- 0.1
   
-  z <- sum(dnorm(mcmc$eps_Tc, mean = 0, sd =  mcmc$sd_Tc, log = TRUE), na.rm = TRUE) - rexp(1)
-  v <- runif(1)
-  interval <- c(max(var.value - v*var.width, var.low), min(var.value + (1-v)*var.width,var.up))
+  # z <- sum(dnorm(mcmc$eps_Tc, mean = 0, sd =  mcmc$sd_Tc, log = TRUE), na.rm = TRUE) - rexp(1)
+  # v <- runif(1)
+  # interval <- c(max(var.value - v*var.width, var.low), min(var.value + (1-v)*var.width,var.up))
   
   #while (TRUE){
-  for(i in 1:50) {
-    var_prop <- runif(1,interval[1], interval[2])
+  #for(i in 1:50) {
+    #var_prop <- runif(1,interval[1], interval[2])
+    var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, "rho_phase2", burnin = 0)[trace.sample]
     eps_prop <- get_eps_T_all(mcmc, matrix.name=matrix.name, rho.phase2=var_prop)
-    like <- sum(dnorm(eps_prop, mean = 0, sd =  mcmc$sd_Tc, log = TRUE), na.rm = TRUE)
-    if (like >= z) {
-      mcmc$rho.phase2 <- var_prop
-      mcmc$eps_Tc <- eps_prop
-      return()
-    } else {
-      # shrink interval
-      if (var_prop < var.value){
-        interval[1] <- var_prop
-      } else {
-        interval[2] <- var_prop
-      }
-      if(abs(interval[1]-interval[2]) < 1e-10) break
-    } # end else
-  }
+  #   like <- sum(dnorm(eps_prop, mean = 0, sd =  mcmc$sd_Tc, log = TRUE), na.rm = TRUE)
+  #   if (like >= z) {
+  #     mcmc$rho.phase2 <- var_prop
+  #     mcmc$eps_Tc <- eps_prop
+  #     return()
+  #   } else {
+  #     # shrink interval
+  #     if (var_prop < var.value){
+  #       interval[1] <- var_prop
+  #     } else {
+  #       interval[2] <- var_prop
+  #     }
+  #     if(abs(interval[1]-interval[2]) < 1e-10) break
+  #   } # end else
+  # }
   mcmc$rho.phase2 <- var_prop
   mcmc$eps_Tc <- eps_prop
-  warning("Cannot find likelihood increase for ", "rho phase2", ".\n Final interval: [", interval[1], ',', interval[2], ']\n',
-          "New likelihood: ", like, ", original likelihood: ", z, immediate. = TRUE)
+  # warning("Cannot find likelihood increase for ", "rho phase2", ".\n Final interval: [", interval[1], ',', interval[2], ']\n',
+  #         "New likelihood: ", like, ", original likelihood: ", z, immediate. = TRUE)
 }
 
-mcmc.update.abSsigma0const <- function(mcmc, id.not.early.index) {
+mcmc.update.abSsigma0const <- function(mcmc, id.not.early.index, trace.sample) {
   # updates a_sd, b_sd, f_sd, sigma0, and const_sd
   #################################
   
@@ -156,11 +161,11 @@ mcmc.update.abSsigma0const <- function(mcmc, id.not.early.index) {
   # put NAs on tau_c spots for id_not_early countries
   eps_Tc_temp[id.not.early.index] <- NA
   
-  mcmc.update.abS('a', eps_Tc_temp, mcmc)
-  mcmc.update.abS('b', eps_Tc_temp, mcmc)
-  mcmc.update.abS('S', eps_Tc_temp, mcmc)
-  mcmc.update.sigma0const('sigma0', 'log_cond_sigma0', eps_Tc_temp, mcmc)
-  mcmc.update.sigma0const('const', 'log_cond_const_sd', eps_Tc_temp, mcmc)
+  mcmc.update.abS('a', eps_Tc_temp, mcmc, trace.sample)
+  mcmc.update.abS('b', eps_Tc_temp, mcmc, trace.sample)
+  mcmc.update.abS('S', eps_Tc_temp, mcmc, trace.sample)
+  mcmc.update.sigma0const('sigma0', 'log_cond_sigma0', eps_Tc_temp, mcmc, trace.sample)
+  mcmc.update.sigma0const('const', 'log_cond_const_sd', eps_Tc_temp, mcmc, trace.sample)
   mcmc$sd_Tc <- ifelse(mcmc$const_sd_dummie_Tc==1, mcmc$const_sd, 1)*
     ifelse((mcmc$sigma0 + mcmc$add_to_sd_Tc)>0, mcmc$sigma0 + mcmc$add_to_sd_Tc, 
            mcmc$meta$sigma0.min)
