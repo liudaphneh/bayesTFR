@@ -271,7 +271,7 @@ find.raw.data.outliers <- function(raw.tfr, iso.unbiased, max.drop=1, max.increa
 #    - adds indicator for whether countries have available covariate data 
 #    - adds country-specific cluster membership for beta sampling
 #    - adds indicator for SSA membership
-covariate.meta.ini <- function(meta){
+covariate.meta.ini <- function(meta, annual = TRUE){
   # import covariate data
   if(annual){
     educ <- read.table(here("../Data", "educ_oneyear_for_testing.txt"))
@@ -334,12 +334,18 @@ covariate.meta.ini <- function(meta){
   gdp.w <- select(gdp.w, colnames(meta$tfr_matrix))
   rownames(gdp.w) <- rownames(educ.w)
   
+  ##### 20230903 for testing purposes: assume covariate data is ALL fully observed ####
+  # we'll remove this later when we switch to estimating bayesTFR params in stage one and beta params in stage two
+  educ.w[is.na(educ.w)] <- 0
+  fp.w[is.na(fp.w)] <- 0
+  gdp.w[is.na(gdp.w)] <- 0
+  
   ##### complete case indicator #####
   # create a matrix that indicates which country-time pairs have 
   # education, FP, and GDP data (complete cases)
   cc.matrix <- !is.na(educ.w) & !is.na(fp.w) & !is.na(gdp.w)
   meta$cc_matrix <- cc.matrix
-  #write.table(cc.matrix, file=here("Data", "cc_matrix_20191111.txt"))
+  #write.table(cc.matrix, file=here("../Data", "cc_matrix_testing.txt"))
   
   ##### add covariate data and cluster membership to meta #####
   meta$educ <- educ.w
@@ -393,8 +399,8 @@ decr.meta.ini <- function(meta){
   # constrain tfr.decr matrix to existence of covariate data using start.idx
   # constrain to remove first obs to match DL.obs in mcmc_sampling (labeled as t+1)
   for(country in 1:meta$nr_countries){
-    start.idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
-    idx <- start.idx:meta$lambda_c[country]
+    start_idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
+    idx <- start_idx:meta$lambda_c[country]
     idx <- idx[-1]
     tfr.decr.final[ ,country][idx] <- tfr.decr[ ,country][idx]
   }
@@ -437,7 +443,7 @@ mcmc.meta.ini <- function(...,
 						uncertainty=uncertainty, my.tfr.raw.file=my.tfr.raw.file, ar.phase2=ar.phase2, 
 						iso.unbiased=iso.unbiased, source.col.name = source.col.name)
 	# Daphne:
-	meta <- covariate.meta.ini(meta)
+	meta <- covariate.meta.ini(meta, annual = mcmc.input$annual.simulation)
 	meta <- decr.meta.ini(meta)
 	
 	return(structure(c(mcmc.input, meta), class='bayesTFR.mcmc.meta'))
