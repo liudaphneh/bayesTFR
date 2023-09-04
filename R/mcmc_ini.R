@@ -376,6 +376,7 @@ covariate.meta.ini <- function(meta, annual = TRUE){
   return(meta)
 }
 
+# (maybe don't use below? replaced with get.decr)
 # DAPHNE: function for TFR decrement additions to meta
 #    - constructs TFR decrements where delta f_{c,t+1} = f_{c,t+1} - f_{c,t}
 #    - decrements are labeled with year t+1
@@ -408,6 +409,24 @@ decr.meta.ini <- function(meta){
   meta$tfr_decr <- tfr.decr.final
   return(meta)
 }
+
+# DAPHNE: function to calculate TFR decr for beta sampling
+#    - constructs TFR decrements where delta f_{c,t+1} = f_{c,t+1} - f_{c,t}
+#    - decrements are labeled with year t+1
+# *****do we need to do the NA steps like in decr.meta.ini once we use a subset for stage 2 estimation?
+get.decr <- function (country, meta, ...) 
+{
+  # if have NAs, then start of Phase II will be earlier than start of covariate data
+  start_idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
+  tfr <- get.observed.tfr(country, meta, ...)[start_idx:meta$lambda_c[country]]
+  ldl <- length(tfr)-1
+  decr <- tfr[2:(ldl+1)] - tfr[1:ldl]
+  decr <- c("1970" = NA, decr)
+  return (decr)
+}
+
+
+
 
 # DAPHNE: 
 #    - added calls to covariate.meta.ini and decr.meta.ini
