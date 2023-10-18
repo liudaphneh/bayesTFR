@@ -2,8 +2,9 @@
 #########################################################
 # MCMC sampling for DLpar for UN estimates
 #########################################################
-
-tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose.iter=10, uncertainty=FALSE) {
+# Daphne:
+#    - added argument "first.stage.directory" to supply directory where m.default (first stage of estimation, corresponding to unconditional bayesTFR) is stored
+tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose.iter=10, uncertainty=FALSE, first.stage.directory = NULL) {
   if (!is.null(mcmc$rng.state)) .Random.seed <- mcmc$rng.state
     nr_simu <- mcmc$iter
     nr_countries <- mcmc$meta$nr_countries_estimation
@@ -113,7 +114,7 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
   	mcenv$mean_eps_Tc <- matrix(0, mcenv$meta$T_end -1+suppl.T, nr_countries_all)
   	
   	# DAPHNE: modified idx.tau_c.id.notearly.all and idx.tau_c.id.notearly
-  	#    - tau_c restricts to Phase III country-time pairs
+  	#    - tau_c restricts to Phase II country-time pairs
   	#    - but also need to restrict to where we have covariate data (e.g. start_cov_data_c)
   	start.both.phaseII.cov <-	apply(matrix(c(mcenv$meta$start_cov_data_c[id_notearly_all], mcenv$meta$tau_c[id_notearly_all]), ncol = 2), 1, max)
   	idx.tau_c.id.notearly.all <- matrix(c(start.both.phaseII.cov, id_notearly_all), ncol=2)
@@ -262,11 +263,12 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 	rho.n.iter <- 0
 	rho.accept <- 0
 
-	############ DAPHNE: load parameter traces from default run of bayesTFR ############
+	############ DAPHNE: load parameter traces from first.stage.directory ############
 	# beta's are sampled conditionally on all other parameters in bayesTFR
 	# so in this step, we load in the parameter traces from a converged run of default (unconditional) bayesTFR
 	# (requires m.default to be an object in the environment... maybe should initialize this somehow)
 	#m.default.burnin <- 20000
+	m.default <- get.tfr.mcmc(first.stage.directory)
 	m.default.burnin <- 5
 	mean_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("mean_eps_tau"),
 	                                                burnin = m.default.burnin)
@@ -316,8 +318,8 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
         #################################################################
         # updates sd_Tc
         # start with this to get the right sd_Tc in the next steps!!
-        
-        mcmc.update.abSsigma0const(mcenv, idx.tau_c.id.notearly, iter.sample[iter.idx])
+
+        mcmc.update.abSsigma0const(mcenv, idx.tau_c.id.notearly, trace.sample = iter.sample[iter.idx], m.default = m.default)
 
        #################################################################### 
         # 2. mean_eps_tau sd_eps_tau: gibbs step
@@ -377,7 +379,7 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 
         if (!is.null(mcenv$meta$ar.phase2) && mcenv$meta$ar.phase2)
         {
-          mcmc.update.rho.phase2(mcenv, matrix.name=matrix.name, iter.sample[iter.idx])
+          mcmc.update.rho.phase2(mcenv, matrix.name=matrix.name, trace.sample = iter.sample[iter.idx], m.default = m.default)
           # mcenv$rho.phase2 <- 0.7
         }
         #################################################################### 
@@ -447,7 +449,7 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 		     # conditional:
 		     mcenv$alpha <- alpha.traces[iter.sample[iter.idx], ]
 		     mcenv$delta <- delta.traces[iter.sample[iter.idx], ]
-         browser()
+
          ##################################################################
          # DAPHNE: bc_rho, beta
          ##################################################################
@@ -517,11 +519,12 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
          
          # get matrix R^{-1} from rho
          R.inv <- get.R.from.rho(mcenv$bc_rho, length(sd.v), new.clust)
-         # March 30, 2020: convert to sparse matrix using Matrix library
+         # convert to sparse matrix using Matrix library
          R.inv <- as(R.inv, "sparseMatrix")
+         diag.sd <- as(diag(1/sd.v), "sparseMatrix")
          
          # create matrix \Sigma^{-1}
-         Sigma.inv <- diag(1/sd.v) %*% R.inv %*% diag(1/sd.v)
+         Sigma.inv <- diag.sd %*% R.inv %*% diag.sd
          # convert back to normal matrix
          Sigma.inv <- as.matrix(Sigma.inv)
          
@@ -544,7 +547,6 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
          mcenv$beta_g_SSA <- mv.sample[6]
          
          # update eps_T after all parameters are estimated for this iter
-         # !!! needs to be updated for uncertainty??? add ... arguments to get.eps.T
          beta_for_eps_T <- c(mcenv$beta_e, mcenv$beta_fp, mcenv$beta_g, 
                              mcenv$beta_e_SSA, mcenv$beta_fp_SSA, mcenv$beta_g_SSA)
          for(country in id_DL_all){
@@ -711,9 +713,9 @@ unblock.gtk <- function(option, options.list=NULL) {
 
 }
 
-# DAPHNE: 20230903 need to update this still
+# DAPHNE: 20230903 need to update the sampling steps within this still; already added first.stage.directory as argument
 tfr.mcmc.sampling.extra <- function(mcmc, mcmc.list, countries, posterior.sample,
-											 iter=NULL, thin = 1, burnin=2000, verbose=FALSE, verbose.iter=100, uncertainty=FALSE) {
+											 iter=NULL, thin = 1, burnin=2000, verbose=FALSE, verbose.iter=100, uncertainty=FALSE, first.stage.directory = NULL) {
 	#run mcmc sampling for countries given by the index 'countries'
   nr_simu <- iter
 	if (is.null(iter))
