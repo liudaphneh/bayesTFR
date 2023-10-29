@@ -1,11 +1,11 @@
 # DAPHNE:
 #    - commented out most sampling steps and replaced with get.parameter.traces for functions involved in mcmc.update.abSsigma0const and mcmc.update.rho.phase2 for conditional sampling of beta
-#    - added trace.sample and m.default as arguments to functions involved in mcmc.update.abSsigma0const and mcmc.update.rho.phase2
+#    - added trace.sample, m.default, and m.default.burnin as arguments to functions involved in mcmc.update.abSsigma0const and mcmc.update.rho.phase2
 #    - updated calls to get.eps.T to include beta
 #    - updated start indices to reflect start of covariate data
 #    - (note that for conditional bayesTFR, most of these functions are not called)
 
-mcmc.update.abS <- function(what, eps_Tc_temp, mcmc, trace.sample, m.default) {
+mcmc.update.abS <- function(what, eps_Tc_temp, mcmc, trace.sample, m.default, m.default.burnin) {
   # 'what' is one of ('a', 'b', 'S')
   var.index <- (1:3)[what == c('a', 'b', 'S')]
   abS.values <- list(a=mcmc$a_sd, b=mcmc$b_sd, S=mcmc$S_sd)
@@ -37,7 +37,7 @@ mcmc.update.abS <- function(what, eps_Tc_temp, mcmc, trace.sample, m.default) {
   ##while (TRUE){
   #for(i in 1:50) {
   #  var_prop <- runif(1,interval[1], interval[2])
-    var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, par.names = var.name, burnin = 0)[trace.sample]
+    var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, par.names = var.name, burnin = m.default.burnin)[trace.sample]
     abS.values[[what]] <- var_prop
     for (country in 1:mcmc$meta$nr_countries){
       add_to_sd_Tc_prop[1:length(mcmc$data.list[[country]]), country] <- (mcmc$data.list[[country]] - abS.values$S)*
@@ -66,7 +66,7 @@ mcmc.update.abS <- function(what, eps_Tc_temp, mcmc, trace.sample, m.default) {
   #         "New likelihood: ", like, ", original likelihood: ", z, immediate. = TRUE)
 }
 
-mcmc.update.sigma0const <- function(what, log.like.func, eps_Tc_temp, mcmc, trace.sample, m.default) {
+mcmc.update.sigma0const <- function(what, log.like.func, eps_Tc_temp, mcmc, trace.sample, m.default, m.default.burnin) {
   # 'what' is one of ('sigma0', 'const')
   var.index <- (1:2)[what == c('sigma0', 'const')]
   var.values <- list(sigma0=mcmc$sigma0, const=mcmc$const_sd)
@@ -85,7 +85,7 @@ mcmc.update.sigma0const <- function(what, log.like.func, eps_Tc_temp, mcmc, trac
   #while (TRUE){
   #for(i in 1:50) {
     #var_prop <- runif(1,interval[1], interval[2])
-    var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, par.names = var.name, burnin = 0)[trace.sample]
+    var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, par.names = var.name, burnin = m.default.burnin)[trace.sample]
     var.values[[what]] <- var_prop
   #   like <- eval(call(log.like.func, mcmc$add_to_sd_Tc, var.values[['const']], var.values[['sigma0']], 
   #                     eps_Tc_temp, mcmc$const_sd_dummie_Tc, mcmc$meta$sigma0.min))
@@ -107,7 +107,7 @@ mcmc.update.sigma0const <- function(what, log.like.func, eps_Tc_temp, mcmc, trac
   #         "New likelihood: ", like, ", original likelihood: ", z, immediate.=TRUE)
 }
 
-mcmc.update.rho.phase2 <- function(mcmc, matrix.name, trace.sample, m.default) {
+mcmc.update.rho.phase2 <- function(mcmc, matrix.name, trace.sample, m.default, m.default.burnin) {
   var.value <- mcmc$rho.phase2
   var.low <- 0
   var.up <- 0.9
@@ -120,7 +120,7 @@ mcmc.update.rho.phase2 <- function(mcmc, matrix.name, trace.sample, m.default) {
   #while (TRUE){
   #for(i in 1:50) {
     #var_prop <- runif(1,interval[1], interval[2])
-    var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, "rho_phase2", burnin = 0)[trace.sample]
+    var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, "rho_phase2", burnin = m.default.burnin)[trace.sample]
     eps_prop <- get_eps_T_all(mcmc, matrix.name=matrix.name, rho.phase2=var_prop)
   #   like <- sum(dnorm(eps_prop, mean = 0, sd =  mcmc$sd_Tc, log = TRUE), na.rm = TRUE)
   #   if (like >= z) {
@@ -143,7 +143,7 @@ mcmc.update.rho.phase2 <- function(mcmc, matrix.name, trace.sample, m.default) {
   #         "New likelihood: ", like, ", original likelihood: ", z, immediate. = TRUE)
 }
 
-mcmc.update.abSsigma0const <- function(mcmc, id.not.early.index, trace.sample, m.default) {
+mcmc.update.abSsigma0const <- function(mcmc, id.not.early.index, trace.sample, m.default, m.default.burnin) {
   # updates a_sd, b_sd, f_sd, sigma0, and const_sd
   #################################
   
@@ -161,11 +161,11 @@ mcmc.update.abSsigma0const <- function(mcmc, id.not.early.index, trace.sample, m
   # put NAs on tau_c spots for id_not_early countries
   eps_Tc_temp[id.not.early.index] <- NA
   
-  mcmc.update.abS('a', eps_Tc_temp, mcmc, trace.sample, m.default)
-  mcmc.update.abS('b', eps_Tc_temp, mcmc, trace.sample, m.default)
-  mcmc.update.abS('S', eps_Tc_temp, mcmc, trace.sample, m.default)
-  mcmc.update.sigma0const('sigma0', 'log_cond_sigma0', eps_Tc_temp, mcmc, trace.sample, m.default)
-  mcmc.update.sigma0const('const', 'log_cond_const_sd', eps_Tc_temp, mcmc, trace.sample, m.default)
+  mcmc.update.abS('a', eps_Tc_temp, mcmc, trace.sample, m.default, m.default.burnin)
+  mcmc.update.abS('b', eps_Tc_temp, mcmc, trace.sample, m.default, m.default.burnin)
+  mcmc.update.abS('S', eps_Tc_temp, mcmc, trace.sample, m.default, m.default.burnin)
+  mcmc.update.sigma0const('sigma0', 'log_cond_sigma0', eps_Tc_temp, mcmc, trace.sample, m.default, m.default.burnin)
+  mcmc.update.sigma0const('const', 'log_cond_const_sd', eps_Tc_temp, mcmc, trace.sample, m.default, m.default.burnin)
   mcmc$sd_Tc <- ifelse(mcmc$const_sd_dummie_Tc==1, mcmc$const_sd, 1)*
     ifelse((mcmc$sigma0 + mcmc$add_to_sd_Tc)>0, mcmc$sigma0 + mcmc$add_to_sd_Tc, 
            mcmc$meta$sigma0.min)
