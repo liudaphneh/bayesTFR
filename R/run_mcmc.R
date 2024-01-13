@@ -5,6 +5,7 @@
 #          -> if FALSE, uses values of TFR from my.tfr.file
 #          -> if TRUE, uses estimated past TFR from first.stage.directory
 #          -> if TRUE but first.stage.directory was run with uncertainty = FALSE, defaults to using values of TFR from my.tfr.file
+#    - covariate.filepath = file path to folder where covariate input data is saved
 run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 'bayesTFR.output'), 
 						thin=1, replace.output=FALSE, annual = FALSE, uncertainty = FALSE, 
 						# meta parameters
@@ -42,6 +43,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						first.stage.directory = NULL,
 						first.stage.burnin = NULL,
 						second.stage.uncertainty = FALSE,
+						covariate.filepath = here("data/covariates"), #***** DAPHNE: NEED TO UPDATE THIS
 						# end Daphne
 						iso.unbiased = NULL, covariates = c('source', 'method'), cont_covariates = NULL, 
 						source.col.name="source",
@@ -155,6 +157,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						first.stage.directory = first.stage.directory,
 						first.stage.burnin = first.stage.burnin,
 						second.stage.uncertainty = second.stage.uncertainty,
+						covariate.filepath = covariate.filepath,
 						# end Daphne
 					 	proposal_cov_gammas = proposal_cov_gammas,
 					 	buffer.size=buffer.size, compression.type=compression.type, 
@@ -263,6 +266,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						first.stage.directory=first.stage.directory,
 						first.stage.burnin=first.stage.burnin,
 						second.stage.uncertainty=second.stage.uncertainty,
+						covariate.filepath=covariate.filepath,
 						# end Daphne
 						gamma.ini=gamma.ini, save.all.parameters=save.all.parameters, verbose=verbose, 
 						verbose.iter=verbose.iter, uncertainty=uncertainty, iso.unbiased=iso.unbiased, 
@@ -281,6 +285,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 					 	first.stage.directory=first.stage.directory,
 					 	first.stage.burnin=first.stage.burnin,
 					 	second.stage.uncertainty=second.stage.uncertainty,
+					 	covariate.filepath=covariate.filepath,
 					 	# end Daphne
 					 	gamma.ini=gamma.ini, save.all.parameters=save.all.parameters,
 					 	verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty, iso.unbiased=iso.unbiased, 
@@ -321,6 +326,7 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
 							first.stage.directory,
 							first.stage.burnin,
 							second.stage.uncertainty,
+							covariate.filepath,
 							# end Daphne
 							gamma.ini=1,
 							save.all.parameters=FALSE,
@@ -364,6 +370,7 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
                    first.stage.directory=first.stage.directory,
                    first.stage.burnin=first.stage.burnin,
                    second.stage.uncertainty=second.stage.uncertainty,
+                   covariate.filepath=covariate.filepath,
                    # end Daphne
                    gamma.ini=gamma.ini[chain.id],
 	                 save.all.parameters=save.all.parameters,

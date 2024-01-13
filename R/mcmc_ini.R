@@ -348,17 +348,20 @@ find.raw.data.outliers <- function(raw.tfr, iso.unbiased, max.drop=1, max.increa
 
 
 # DAPHNE: function for covariate additions to meta
+#    - looks in filepath covariate.filepath
 #    - adds education, FP, and GDP data
 #    - adds indicator for whether countries have available covariate data 
 #    - adds country-specific cluster membership for beta sampling
 #    - adds indicator for SSA membership
-covariate.meta.ini <- function(meta, annual = TRUE){
+covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = here("data/covariates")){
   # import covariate data
   if(annual){
-    #educ <- read.table(here("../Data", "educ_oneyear_for_testing.txt"))
-    educ <- read.table(here("../Data", "bayestfr_educ_annual_20240107.txt"))
-    fp <- read.table(here("../Data", "fp_oneyear_for_testing.txt"))
-    gdp <- read.table(here("../Data", "bayestfr_gdp_annual_20231112.txt"))
+    #educ <- read.table(here("../Data", "bayestfr_educ_annual_20240107.txt"))
+    #fp <- read.table(here("../Data", "fp_oneyear_for_testing.txt"))
+    #gdp <- read.table(here("../Data", "bayestfr_gdp_annual_20231112.txt"))
+    educ <- read.table(paste0(covariate.filepath, "/bayestfr_educ_annual.txt"))
+    fp <- read.table(paste0(covariate.filepath, "/bayestfr_fp_annual.txt"))
+    gdp <- read.table(paste0(covariate.filepath, "/bayestfr_gdp_annual.txt"))
   } else{
     educ <- read.table(here("../../Conditional/Data", "educ_2_hier_X_minus_Xstar_20230114.txt"))
     fp <- read.table(here("../../Conditional/Data", "CP_X_minus_Xstar_20210210.txt"))
@@ -367,6 +370,7 @@ covariate.meta.ini <- function(meta, annual = TRUE){
   
   ##### format to match tfr_matrix #####
   # education
+  educ <- filter(educ, year %in% rownames(meta$tfr_matrix))
   educ.w <- spread(select(educ, -country), code, attain)
   rownames(educ.w) <- educ.w$year
   educ.w <- select(educ.w, intersect(colnames(meta$tfr_matrix), colnames(educ.w)))
@@ -383,6 +387,7 @@ covariate.meta.ini <- function(meta, annual = TRUE){
   educ.w <- select(educ.w, colnames(meta$tfr_matrix))
   
   # family planning
+  fp <- filter(fp, year %in% rownames(meta$tfr_matrix))
   fp.w <- spread(select(fp, -country), code, CP_modern)
   rownames(fp.w) <- fp.w$year
   fp.w <- select(fp.w, intersect(colnames(meta$tfr_matrix), colnames(fp.w)))
@@ -400,6 +405,7 @@ covariate.meta.ini <- function(meta, annual = TRUE){
   rownames(fp.w) <- rownames(educ.w)
   
   # GDP
+  gdp <- filter(gdp, year %in% rownames(meta$tfr_matrix))
   gdp.w <- spread(gdp, code, gdp)
   rownames(gdp.w) <- gdp.w$year
   gdp.w <- select(gdp.w, intersect(colnames(meta$tfr_matrix), colnames(gdp.w)))
@@ -482,7 +488,7 @@ decr.meta.ini <- function(meta){
 
 # DAPHNE: 
 #    - added calls to covariate.meta.ini and decr.meta.ini
-#    - added arguments first.stage.directory, first.stage.burnin, second.stage.uncertainty
+#    - added arguments first.stage.directory, first.stage.burnin, second.stage.uncertainty, covariate.filepath
 mcmc.meta.ini <- function(...,
 						U.c.low,
 						start.year=1950, present.year=2020, 
@@ -493,6 +499,7 @@ mcmc.meta.ini <- function(...,
 						first.stage.directory=NULL, 
 						first.stage.burnin=NULL,
 						second.stage.uncertainty=FALSE, 
+						covariate.filepath=here("data/covariates"), #***** DAPHNE NEEDS TO UPDATE THIS
 						# end Daphne
 						my.tfr.raw.file=NULL, 
 						ar.phase2=FALSE, iso.unbiased=NULL, source.col.name = "source",
@@ -523,12 +530,15 @@ mcmc.meta.ini <- function(...,
 						first.stage.directory = first.stage.directory, 
 						first.stage.burnin = first.stage.burnin,
 						second.stage.uncertainty = second.stage.uncertainty, 
+						covariate.filepath=covariate.filepath,
 						# end Daphne
 						my.tfr.raw.file=my.tfr.raw.file, ar.phase2=ar.phase2, 
 						iso.unbiased=iso.unbiased, source.col.name = source.col.name)
 	
 	# Daphne:
-	meta <- covariate.meta.ini(meta, annual = mcmc.input$annual.simulation)
+	meta <- covariate.meta.ini(meta, 
+	                           annual = mcmc.input$annual.simulation, 
+	                           covariate.filepath = covariate.filepath)
 	meta <- decr.meta.ini(meta)
 	meta$first.stage.directory <- first.stage.directory
 	meta$first.stage.burnin <- first.stage.burnin
@@ -544,6 +554,7 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 						first.stage.directory=NULL, 
 						first.stage.burnin=NULL,
 						second.stage.uncertainty=FALSE, 
+						covariate.filepath=here("data/covariates"), #***** DAPHNE NEEDS TO UPDATE THIS
 						# end Daphne
 						my.tfr.raw.file=NULL, 
 						ar.phase2=FALSE, iso.unbiased=NULL, source.col.name = "source") {
@@ -751,6 +762,7 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 					 first.stage.directory=NULL,
 					 first.stage.burnin=NULL,
 					 second.stage.uncertainty=FALSE,
+					 covariate.filepath=here("data/covariates"), #***** DAPHNE NEEDS TO UPDATE THIS
 					 # end Daphne
 					 save.all.parameters=FALSE,
 					 verbose=FALSE, uncertainty=FALSE, iso.unbiased=NULL,
@@ -852,6 +864,7 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 						            first.stage.directory = first.stage.directory,
 						            first.stage.burnin = first.stage.burnin,
 				            		second.stage.uncertainty = second.stage.uncertainty,
+						            covariate.filepath=covariate.filepath,
 						            # end Daphne
                         iter=iter, finished.iter=1, length = 1,
                         id=chain.id,
