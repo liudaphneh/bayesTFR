@@ -24,46 +24,99 @@ DLcurve <- function(DLpar, tfr, p1, p2, annual = FALSE){
 # DAPHNE:
 #    - modified to account for covariate term in eps calculation
 #    - added argument betapar = c(beta_E, beta_FP, beta_GDP, beta_e_SSA, beta_fp_SSA, beta_g_SSA)
-get.eps.T <- function (DLpar, betapar, country, meta, ...) 
+#    - added argument tfr_trace, has form tfr.samples[[country]][iter.idx, ]
+get.eps.T <- function (DLpar, betapar, tfr_trace = NULL, country, meta, ...) 
 {
-    # Daphne: if we have NAs, then start of Phase II will be earlier then start of covariate data
-    start_idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
+  # Daphne: if we have NAs, then start of Phase II will be earlier then start of covariate data
+  start_idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
   
+  # Daphne: if second.stage.uncertainty, use parameter traces for TFR
+  if(meta$second.stage.uncertainty){
+    tfr <- tfr_trace[start_idx:meta$lambda_c[country]]
+    if(is.null(tfr)){
+      #warning("tfr_trace is NULL, so using get.observed.tfr")
+      tfr <- get.observed.tfr(country, meta, ...)[start_idx:meta$lambda_c[country]]
+    } else{
+      names(tfr) <- names(get.observed.tfr(country, meta, ...)[start_idx:meta$lambda_c[country]])
+    }
+  } else{
     tfr <- get.observed.tfr(country, meta, ...)[start_idx:meta$lambda_c[country]]
-    ldl <- length(tfr)-1
-    dl <- DLcurve(DLpar, tfr[1:ldl], meta$dl.p1, meta$dl.p2, annual = meta$annual.simulation)
+  }
+  
+  ldl <- length(tfr)-1
+  dl <- DLcurve(DLpar, tfr[1:ldl], meta$dl.p1, meta$dl.p2, annual = meta$annual.simulation)
+  
+  # Daphne: covariate term
+  educ.c <- meta$educ[start_idx:meta$lambda_c[country], country][1:ldl]
+  fp.c <- meta$fp[start_idx:meta$lambda_c[country], country][1:ldl]
+  gdp.c <- meta$gdp[start_idx:meta$lambda_c[country], country][1:ldl]
+  SSA.c <- meta$SSA_indicator[country]
+  covariate_contr <- betapar[1]*educ.c + betapar[2]*fp.c + betapar[3]*gdp.c +
+    betapar[4]*educ.c*SSA.c + betapar[5]*fp.c*SSA.c + betapar[6]*gdp.c*SSA.c
+  
+  # Daphne: add covariate term to eps calculation
+  eps <- tfr[2:(ldl+1)] - tfr[1:ldl] + dl - covariate_contr
+  if (!is.null(meta$ar.phase2) && meta$ar.phase2) 
+  {
+    args <- list(...)
+    if ('rho.phase2' %in% names(args) && length(eps) > 1) eps <- c(eps[1], eps[2:ldl]-args[['rho.phase2']] * eps[1:(ldl-1)])
+  }
+  
+  # Put NAs on eps indexed by meta$indices.outliers[[country]]
+  if (as.character(country) %in% names(meta$indices.outliers))
+  {
+    outlier_indices <- meta$indices.outliers[[as.character(country)]]
+    if (!is.null(meta$ar.phase2) && meta$ar.phase2)
+      outlier_indices <- sort(unique(c(outlier_indices, outlier_indices+1)))
     
-    # Daphne: covariate term
-    educ.c <- meta$educ[start_idx:meta$lambda_c[country], country][1:ldl]
-    fp.c <- meta$fp[start_idx:meta$lambda_c[country], country][1:ldl]
-    gdp.c <- meta$gdp[start_idx:meta$lambda_c[country], country][1:ldl]
-    SSA.c <- meta$SSA_indicator[country]
-    covariate_contr <- betapar[1]*educ.c + betapar[2]*fp.c + betapar[3]*gdp.c +
-      betapar[4]*educ.c*SSA.c + betapar[5]*fp.c*SSA.c + betapar[6]*gdp.c*SSA.c
-    
-    # Daphne: add covariate term to eps calculation
-    eps <- tfr[2:(ldl+1)] - tfr[1:ldl] + dl - covariate_contr
-    if (!is.null(meta$ar.phase2) && meta$ar.phase2) 
-    {
-      args <- list(...)
-      if ('rho.phase2' %in% names(args) && length(eps) > 1) eps <- c(eps[1], eps[2:ldl]-args[['rho.phase2']] * eps[1:(ldl-1)])
-    }
+    eps <- eps[-outlier_indices]
+  }
+  
+  return (eps)
+}
 
-    # Put NAs on eps indexed by meta$indices.outliers[[country]]
-    if (as.character(country) %in% names(meta$indices.outliers))
-    {
-      outlier_indices <- meta$indices.outliers[[as.character(country)]]
-      if (!is.null(meta$ar.phase2) && meta$ar.phase2)
-        outlier_indices <- sort(unique(c(outlier_indices, outlier_indices+1)))
-      
-      eps <- eps[-outlier_indices]
-    }
-      
-    return (eps)
+# original version of get.eps.T with no tfr_trace
+get.eps.T.OLD <- function (DLpar, betapar, country, meta, ...) 
+{
+  # Daphne: if we have NAs, then start of Phase II will be earlier then start of covariate data
+  start_idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
+  
+  tfr <- get.observed.tfr(country, meta, ...)[start_idx:meta$lambda_c[country]]
+  ldl <- length(tfr)-1
+  dl <- DLcurve(DLpar, tfr[1:ldl], meta$dl.p1, meta$dl.p2, annual = meta$annual.simulation)
+  
+  # Daphne: covariate term
+  educ.c <- meta$educ[start_idx:meta$lambda_c[country], country][1:ldl]
+  fp.c <- meta$fp[start_idx:meta$lambda_c[country], country][1:ldl]
+  gdp.c <- meta$gdp[start_idx:meta$lambda_c[country], country][1:ldl]
+  SSA.c <- meta$SSA_indicator[country]
+  covariate_contr <- betapar[1]*educ.c + betapar[2]*fp.c + betapar[3]*gdp.c +
+    betapar[4]*educ.c*SSA.c + betapar[5]*fp.c*SSA.c + betapar[6]*gdp.c*SSA.c
+  
+  # Daphne: add covariate term to eps calculation
+  eps <- tfr[2:(ldl+1)] - tfr[1:ldl] + dl - covariate_contr
+  if (!is.null(meta$ar.phase2) && meta$ar.phase2) 
+  {
+    args <- list(...)
+    if ('rho.phase2' %in% names(args) && length(eps) > 1) eps <- c(eps[1], eps[2:ldl]-args[['rho.phase2']] * eps[1:(ldl-1)])
+  }
+  
+  # Put NAs on eps indexed by meta$indices.outliers[[country]]
+  if (as.character(country) %in% names(meta$indices.outliers))
+  {
+    outlier_indices <- meta$indices.outliers[[as.character(country)]]
+    if (!is.null(meta$ar.phase2) && meta$ar.phase2)
+      outlier_indices <- sort(unique(c(outlier_indices, outlier_indices+1)))
+    
+    eps <- eps[-outlier_indices]
+  }
+  
+  return (eps)
 }
 
 # DAPHNE
 #    - modified to account for covariate term in eps calculation
+#    - and to handle tfr_trace needed for get.eps.T
 get_eps_T_all <- function (mcmc, ...) {
   suppl.T <- if(!is.null(mcmc$meta$suppl.data$regions)) mcmc$meta$suppl.data$T_end else 0
 	eps_Tc <- matrix(NA, mcmc$meta$T_end-1 + suppl.T, mcmc$meta$nr_countries)
@@ -84,9 +137,37 @@ get_eps_T_all <- function (mcmc, ...) {
     idx <- setdiff(idx, raw.outliers)
     
     # Daphne: added beta argument
-    eps_Tc[idx, country] <- get.eps.T(theta, beta, country, mcmc$meta, ...)
+    eps_Tc[idx, country] <- get.eps.T(theta, beta, tfr_trace = NULL, country, mcmc$meta, ...)
   }
 	
+  return(eps_Tc)
+}
+
+# original version of get_eps_T with no tfr_trace
+get_eps_T_all_OLD <- function (mcmc, ...) {
+  suppl.T <- if(!is.null(mcmc$meta$suppl.data$regions)) mcmc$meta$suppl.data$T_end else 0
+  eps_Tc <- matrix(NA, mcmc$meta$T_end-1 + suppl.T, mcmc$meta$nr_countries)
+  
+  # Daphne: load in beta
+  beta <- c(mcmc$beta_e, mcmc$beta_fp, mcmc$beta_g, mcmc$beta_e_SSA, mcmc$beta_fp_SSA, mcmc$beta_g_SSA)
+  
+  for (country in mcmc$meta$id_DL){
+    if(country == 86){browser()}
+    theta <- c((mcmc$U_c[country]-mcmc$Triangle_c4[country])*exp(mcmc$gamma_ci[country,])/                                     
+                 sum(exp(mcmc$gamma_ci[country,])), mcmc$Triangle_c4[country], mcmc$d_c[country])
+    
+    # Daphne: modify idx since if we have NAs, then start of Phase II will be earlier than the start of covariate data
+    start_idx <- max(mcmc$meta$start_c[country], mcmc$meta$start_cov_data_c[country])
+    idx <- start_idx:(mcmc$meta$lambda_c[country]-1)
+    raw.outliers <- mcmc$meta$indices.outliers[[as.character(country)]]
+    if (!is.null(mcmc$meta$ar.phase2) && mcmc$meta$ar.phase2) 
+      raw.outliers <- sort(unique(c(raw.outliers, raw.outliers+1)))
+    idx <- setdiff(idx, raw.outliers)
+    
+    # Daphne: added beta argument
+    eps_Tc[idx, country] <- get.eps.T(theta, beta, country, mcmc$meta, ...)
+  }
+  
   return(eps_Tc)
 }
 
@@ -274,13 +355,14 @@ find.raw.data.outliers <- function(raw.tfr, iso.unbiased, max.drop=1, max.increa
 covariate.meta.ini <- function(meta, annual = TRUE){
   # import covariate data
   if(annual){
-    educ <- read.table(here("../Data", "educ_oneyear_for_testing.txt"))
+    #educ <- read.table(here("../Data", "educ_oneyear_for_testing.txt"))
+    educ <- read.table(here("../Data", "bayestfr_educ_annual_20240107.txt"))
     fp <- read.table(here("../Data", "fp_oneyear_for_testing.txt"))
-    gdp <- read.table(here("../Data", "gdp_oneyear_for_testing.txt"))
+    gdp <- read.table(here("../Data", "bayestfr_gdp_annual_20231112.txt"))
   } else{
-    educ <- read.table(here("../Conditional/Data", "educ_2_hier_X_minus_Xstar_20230114.txt"))
-    fp <- read.table(here("../Conditional/Data", "CP_X_minus_Xstar_20210210.txt"))
-    gdp <- read.table(here("../Conditional/Data", "gdp_X_minus_Xstar_20210309.txt"))
+    educ <- read.table(here("../../Conditional/Data", "educ_2_hier_X_minus_Xstar_20230114.txt"))
+    fp <- read.table(here("../../Conditional/Data", "CP_X_minus_Xstar_20210210.txt"))
+    gdp <- read.table(here("../Data", "bayestfr_gdp_five_year_20231112.txt"))
   }
   
   ##### format to match tfr_matrix #####
@@ -318,7 +400,7 @@ covariate.meta.ini <- function(meta, annual = TRUE){
   rownames(fp.w) <- rownames(educ.w)
   
   # GDP
-  gdp.w <- spread(select(gdp, -country), code, gdp_perc_change)
+  gdp.w <- spread(gdp, code, gdp)
   rownames(gdp.w) <- gdp.w$year
   gdp.w <- select(gdp.w, intersect(colnames(meta$tfr_matrix), colnames(gdp.w)))
   # add years with no GDP data
@@ -333,16 +415,10 @@ covariate.meta.ini <- function(meta, annual = TRUE){
   gdp.w <- bind_cols(gdp.w, no.gdp.data)
   gdp.w <- select(gdp.w, colnames(meta$tfr_matrix))
   rownames(gdp.w) <- rownames(educ.w)
-  
-  ##### 20230903 for testing purposes: assume covariate data is ALL fully observed ####
-  # we'll remove this later when we switch to estimating bayesTFR params in stage one and beta params in stage two
-  educ.w[is.na(educ.w)] <- 0
-  fp.w[is.na(fp.w)] <- 0
-  gdp.w[is.na(gdp.w)] <- 0
-  
+
   ##### complete case indicator #####
   # create a matrix that indicates which country-time pairs have 
-  # education, FP, and GDP data (complete cases)
+  # education, FP, and GDP data (complete cases of DeltaX)
   cc.matrix <- !is.na(educ.w) & !is.na(fp.w) & !is.na(gdp.w)
   meta$cc_matrix <- cc.matrix
   #write.table(cc.matrix, file=here("../Data", "cc_matrix_testing.txt"))
@@ -363,7 +439,10 @@ covariate.meta.ini <- function(meta, annual = TRUE){
   meta$cluster <- clusterUNregion$cluster
   
   ##### start index of covariate data for each country #####
-  meta$start_cov_data_c <- as.numeric(apply(meta$cc_matrix, 2, function(x){which(x == TRUE)}[1]))
+  # if we want this to be start index of DeltaX
+  #meta$start_cov_data_c <- as.numeric(apply(meta$cc_matrix, 2, function(x){which(x == TRUE)}[1]))
+  # if we want this to be start index of X
+  meta$start_cov_data_c <- as.numeric(apply(meta$cc_matrix, 2, function(x){which(x == TRUE)}[1] - 1))
   
   ##### indicator for SSA membership #####
   # SSA = region codes c(910, 911, 913, 914)
@@ -376,71 +455,50 @@ covariate.meta.ini <- function(meta, annual = TRUE){
   return(meta)
 }
 
-# (maybe don't use below? replaced with get.decr)
 # DAPHNE: function for TFR decrement additions to meta
 #    - constructs TFR decrements where delta f_{c,t+1} = f_{c,t+1} - f_{c,t}
 #    - decrements are labeled with year t+1
-#    - saves as tfr_decr in meta, formatted like tfr_matrix
+#    - saved as tfr_decr in meta, formatted like tfr_matrix
+#    - used for calculation of priors for beta
 decr.meta.ini <- function(meta){
-  T <- nrow(meta$tfr_matrix)
-  tfr.decr <- matrix(NA, nrow=T, ncol=meta$nr_countries, 
-                     dimnames=list(rownames(meta$tfr_matrix)[1:(T)],
-                                   colnames(meta$tfr_matrix)))
-  for(i in 2:T) {
-    nisna0 <- !is.na(meta$tfr_matrix[i-1,])
-    nisna1 <- !is.na(meta$tfr_matrix[i,])
-    nisna2 <- nisna1 & nisna0
-    if (sum(nisna2) > 0) {
-      tfr.decr[i,  nisna2] <- meta$tfr_matrix[i,nisna2] - meta$tfr_matrix[i-1,nisna2]
-    }
-  }
-  tfr.decr.final <- matrix(NA, nrow=T, ncol=meta$nr_countries, 
-                           dimnames=list(rownames(meta$tfr_matrix)[1:(T)],
-                                         colnames(meta$tfr_matrix)))
-  # constrain tfr.decr matrix to existence of covariate data using start.idx
-  # constrain to remove first obs to match DL.obs in mcmc_sampling (labeled as t+1)
+  tfr.decr <- matrix(NA, nrow=nrow(meta$tfr_matrix), ncol=meta$nr_countries, 
+                dimnames=list(
+                  rownames(meta$tfr_matrix)[1:nrow(meta$tfr_matrix)],
+                  colnames(meta$tfr_matrix))
+                )
   for(country in 1:meta$nr_countries){
     start_idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
-    idx <- start_idx:meta$lambda_c[country]
-    idx <- idx[-1]
-    tfr.decr.final[ ,country][idx] <- tfr.decr[ ,country][idx]
+    tfr.vctr <- get.observed.tfr(country, meta)[start_idx:meta$lambda_c[country]]
+    ldl <- length(tfr.vctr)-1
+    tfr.decr.vctr <- tfr.vctr[2:(ldl+1)] - tfr.vctr[1:ldl]
+    tfr.decr.vctr <- c("1970" = NA, tfr.decr.vctr)
+    tfr.decr[names(tfr.decr.vctr), country] <- tfr.decr.vctr
   }
   
-  meta$tfr_decr <- tfr.decr.final
+  meta$tfr_decr <- tfr.decr
   return(meta)
 }
-
-# DAPHNE: function to calculate TFR decr for beta sampling
-#    - constructs TFR decrements where delta f_{c,t+1} = f_{c,t+1} - f_{c,t}
-#    - decrements are labeled with year t+1
-# *****do we need to do the NA steps like in decr.meta.ini once we use a subset for stage 2 estimation?
-get.decr <- function (country, meta, ...) 
-{
-  # if have NAs, then start of Phase II will be earlier than start of covariate data
-  start_idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
-  tfr <- get.observed.tfr(country, meta, ...)[start_idx:meta$lambda_c[country]]
-  ldl <- length(tfr)-1
-  decr <- tfr[2:(ldl+1)] - tfr[1:ldl]
-  decr <- c("1970" = NA, decr)
-  return (decr)
-}
-
-
 
 
 # DAPHNE: 
 #    - added calls to covariate.meta.ini and decr.meta.ini
+#    - added arguments first.stage.directory, first.stage.burnin, second.stage.uncertainty
 mcmc.meta.ini <- function(...,
 						U.c.low,
 						start.year=1950, present.year=2020, 
 						wpp.year=2019, my.tfr.file = NULL, my.locations.file = NULL,
 						proposal_cov_gammas = NULL, # should be a list with elements 'values' and 'country_codes'
 						verbose=FALSE, uncertainty=FALSE,
+						# Daphne
+						first.stage.directory=NULL, 
+						first.stage.burnin=NULL,
+						second.stage.uncertainty=FALSE, 
+						# end Daphne
 						my.tfr.raw.file=NULL, 
 						ar.phase2=FALSE, iso.unbiased=NULL, source.col.name = "source",
 						use.wpp.data = TRUE) {
 	# Initialize meta parameters - those that are common to all chains.
-    
+ 
   args <- list(...)
 	mcmc.input <- list()
 	for (arg in names(args)) mcmc.input[[arg]] <- args[[arg]]
@@ -453,17 +511,28 @@ mcmc.meta.ini <- function(...,
 	    warning("If use.wpp.data is set to FALSE, my.tfr.file should be given. The simulation will use default WPP data.")
 	    use.wpp.data <- TRUE
 	}
+
 	tfr.with.regions <- set_wpp_regions(start.year=start.year, present.year=present.year, wpp.year=wpp.year, 
 										my.tfr.file = my.tfr.file, my.locations.file=my.locations.file, 
 										annual = mcmc.input$annual.simulation, ignore.last.observed = uncertainty,
 										use.wpp.data = use.wpp.data, verbose=verbose)
 	meta <- do.meta.ini(mcmc.input, tfr.with.regions,  
 						proposal_cov_gammas=proposal_cov_gammas, verbose=verbose, 
-						uncertainty=uncertainty, my.tfr.raw.file=my.tfr.raw.file, ar.phase2=ar.phase2, 
+						uncertainty=uncertainty, 
+						# Daphne
+						first.stage.directory = first.stage.directory, 
+						first.stage.burnin = first.stage.burnin,
+						second.stage.uncertainty = second.stage.uncertainty, 
+						# end Daphne
+						my.tfr.raw.file=my.tfr.raw.file, ar.phase2=ar.phase2, 
 						iso.unbiased=iso.unbiased, source.col.name = source.col.name)
+	
 	# Daphne:
 	meta <- covariate.meta.ini(meta, annual = mcmc.input$annual.simulation)
 	meta <- decr.meta.ini(meta)
+	meta$first.stage.directory <- first.stage.directory
+	meta$first.stage.burnin <- first.stage.burnin
+	meta$second.stage.uncertainty <- second.stage.uncertainty
 	
 	return(structure(c(mcmc.input, meta), class='bayesTFR.mcmc.meta'))
 }
@@ -471,6 +540,11 @@ mcmc.meta.ini <- function(...,
 	
 do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL, 
 						use.average.gammas.cov=FALSE, burnin=200, verbose=FALSE, uncertainty=FALSE, 
+						# Daphne
+						first.stage.directory=NULL, 
+						first.stage.burnin=NULL,
+						second.stage.uncertainty=FALSE, 
+						# end Daphne
 						my.tfr.raw.file=NULL, 
 						ar.phase2=FALSE, iso.unbiased=NULL, source.col.name = "source") {
   results_tau <- find.tau.lambda.and.DLcountries(tfr.with.regions$tfr_matrix, annual = meta$annual.simulation,
@@ -570,6 +644,7 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 	      stop("File type not detectible. Please use txt or csv files.")
 	    }
 	  }
+
 	  rawTFR <- rawTFR[rawTFR$country_code %in% as.numeric(colnames(output$tfr_matrix_all)),]
 	  rawTFR <- rawTFR[rawTFR$year < meta$present.year + 0.48,] # to guarantee that 0.5 is included and rounded downward even when 0.01 is added
 	  rawTFR <- rawTFR[rawTFR$year > meta$start.year,]
@@ -673,6 +748,9 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 					 beta_e_SSA.ini=0, beta_fp_SSA.ini=0,
 					 beta_g_SSA.ini=0,
 					 bc_rho.ini = 0,
+					 first.stage.directory=NULL,
+					 first.stage.burnin=NULL,
+					 second.stage.uncertainty=FALSE,
 					 # end Daphne
 					 save.all.parameters=FALSE,
 					 verbose=FALSE, uncertainty=FALSE, iso.unbiased=NULL,
@@ -771,6 +849,9 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 						            beta_fp_SSA.ini = beta_fp_SSA.ini,
 						            beta_g_SSA.ini = beta_g_SSA.ini,
 						            bc_rho = bc_rho, bc_rho.ini = bc_rho.ini,
+						            first.stage.directory = first.stage.directory,
+						            first.stage.burnin = first.stage.burnin,
+				            		second.stage.uncertainty = second.stage.uncertainty,
 						            # end Daphne
                         iter=iter, finished.iter=1, length = 1,
                         id=chain.id,

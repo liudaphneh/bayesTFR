@@ -1,5 +1,10 @@
 # Daphne:
-#    - added argument "first.stage.directory" to supply directory where m.default (first stage of estimation, corresponding to unconditional bayesTFR) is stored
+#    - first.stage.directory = directory where the first stage of estimation (i.e. m.default) is stored
+#    - first.stage.burnin = amount of burnin to use for run stored in first.stage.directory
+#    - second.stage.uncertainty = Boolean indicating if the second stage should be estimated using uncertainty about past values of TFR
+#          -> if FALSE, uses values of TFR from my.tfr.file
+#          -> if TRUE, uses estimated past TFR from first.stage.directory
+#          -> if TRUE but first.stage.directory was run with uncertainty = FALSE, defaults to using values of TFR from my.tfr.file
 run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 'bayesTFR.output'), 
 						thin=1, replace.output=FALSE, annual = FALSE, uncertainty = FALSE, 
 						# meta parameters
@@ -35,6 +40,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						beta_e_SSA.ini=NULL, beta_fp_SSA.ini=NULL, 
 						beta_g_SSA.ini=NULL,
 						first.stage.directory = NULL,
+						first.stage.burnin = NULL,
+						second.stage.uncertainty = FALSE,
 						# end Daphne
 						iso.unbiased = NULL, covariates = c('source', 'method'), cont_covariates = NULL, 
 						source.col.name="source",
@@ -60,6 +67,17 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 		nr.chains <- auto.conf$nr.chains
 		auto.run <- TRUE		
 	}
+	
+	# DAPHNE
+	# if second.stage.uncertainty = TRUE, check that first stage actually used uncertainty = TRUE
+	if(second.stage.uncertainty){
+	  m.default <- get.tfr.mcmc(sim.dir = first.stage.directory)
+	  if(!m.default$mcmc.list$`1`$uncertainty){
+	    second.stage.uncertainty = FALSE
+	    warning('First stage used uncertainty = FALSE, so second.stage.uncertainty was set to FALSE.')
+	  }
+	}
+	# end DAPHNE
 	
 	if (verbose) {
 		cat('\nStarting Bayesian Hierarchical Model for TFR - Phase II.\n')
@@ -134,6 +152,9 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						bc_rho.ini=bc_rho.ini,
 						beta_e_SSA.ini=beta_e_SSA.ini, beta_fp_SSA.ini=beta_fp_SSA.ini, 
 						beta_g_SSA.ini=beta_g_SSA.ini,
+						first.stage.directory = first.stage.directory,
+						first.stage.burnin = first.stage.burnin,
+						second.stage.uncertainty = second.stage.uncertainty,
 						# end Daphne
 					 	proposal_cov_gammas = proposal_cov_gammas,
 					 	buffer.size=buffer.size, compression.type=compression.type, 
@@ -240,6 +261,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						beta_g_SSA.ini=beta_g_SSA.ini,
 						bc_rho.ini=bc_rho.ini,
 						first.stage.directory=first.stage.directory,
+						first.stage.burnin=first.stage.burnin,
+						second.stage.uncertainty=second.stage.uncertainty,
 						# end Daphne
 						gamma.ini=gamma.ini, save.all.parameters=save.all.parameters, verbose=verbose, 
 						verbose.iter=verbose.iter, uncertainty=uncertainty, iso.unbiased=iso.unbiased, 
@@ -256,6 +279,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 					 	beta_g_SSA.ini=beta_g_SSA.ini,
 					 	bc_rho.ini=bc_rho.ini,
 					 	first.stage.directory=first.stage.directory,
+					 	first.stage.burnin=first.stage.burnin,
+					 	second.stage.uncertainty=second.stage.uncertainty,
 					 	# end Daphne
 					 	gamma.ini=gamma.ini, save.all.parameters=save.all.parameters,
 					 	verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty, iso.unbiased=iso.unbiased, 
@@ -294,6 +319,8 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
 							beta_e_SSA.ini, beta_fp_SSA.ini, beta_g_SSA.ini,
 							bc_rho.ini,
 							first.stage.directory,
+							first.stage.burnin,
+							second.stage.uncertainty,
 							# end Daphne
 							gamma.ini=1,
 							save.all.parameters=FALSE,
@@ -301,6 +328,7 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
 							covariates=c('source', 'method'), cont_covariates=NULL, source.col.name="source") {
 								
   cat('\n\nChain nr.', chain.id, '\n')
+
     if (verbose) {
     	cat('************\n')
     	cat('Starting values:\n')
@@ -317,7 +345,7 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
     	names(sv) <- c('S', 'a', 'b', 'sigma0', 'Triangle_c4', 'const', 'beta_e', 'beta_fp', 'beta_g', 'beta_e_SSA', 'beta_fp_SSA', 'beta_g_SSA', 'bc_rho', 'gamma')
     	print(sv)
     }
-  
+
   mcmc <- mcmc.ini(chain.id, meta, iter=iter[chain.id],
 	                 S.ini=S.ini[chain.id],
 	                 a.ini=a.ini[chain.id],
@@ -333,6 +361,9 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
                    beta_fp_SSA.ini=beta_fp_SSA.ini[chain.id],
                    beta_g_SSA.ini=beta_g_SSA.ini[chain.id],
                    bc_rho.ini=bc_rho.ini[chain.id],
+                   first.stage.directory=first.stage.directory,
+                   first.stage.burnin=first.stage.burnin,
+                   second.stage.uncertainty=second.stage.uncertainty,
                    # end Daphne
                    gamma.ini=gamma.ini[chain.id],
 	                 save.all.parameters=save.all.parameters,
@@ -368,7 +399,7 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
 	
 	if (verbose) 
 		cat('Start sampling -', mcmc$iter, 'iterations in total.\n')
-	mcmc <- tfr.mcmc.sampling(mcmc, thin=thin, verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty, first.stage.directory=first.stage.directory)
+	mcmc <- tfr.mcmc.sampling(mcmc, thin=thin, verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty)
 	return(mcmc)
 }
 	
@@ -429,11 +460,10 @@ mcmc.continue.chain <- function(chain.id, mcmc.list, iter, verbose=FALSE, verbos
 	mcmc <- mcmc.list[[chain.id]]
 	mcmc$iter <- mcmc$finished.iter + iter
 	uncertainty <- mcmc$uncertainty
-	first.stage.directory <- mcmc$first.stage.directory
 	if (verbose) 
 		cat('Continue sampling -', iter, 'additional iterations,', mcmc$iter, 'iterations in total.\n')
 
-	mcmc <- tfr.mcmc.sampling(mcmc, thin=mcmc$thin, start.iter=mcmc$finished.iter+1, verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty, first.stage.directory=first.stage.directory)
+	mcmc <- tfr.mcmc.sampling(mcmc, thin=mcmc$thin, start.iter=mcmc$finished.iter+1, verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty)
 	return(mcmc)
 }
 
@@ -595,20 +625,19 @@ run.tfr.mcmc.extra <- function(sim.dir=file.path(getwd(), 'bayesTFR.output'),
 }
 	
 mcmc.run.chain.extra <- function(chain.id, mcmc.list, countries, posterior.sample, 
-												iter=NULL, burnin=2000, thin=1, verbose=FALSE, verbose.iter=100, uncertainty=FALSE, first.stage.directory = NULL) {
+												iter=NULL, burnin=2000, thin=1, verbose=FALSE, verbose.iter=100, uncertainty=FALSE) {
 	cat('\n\nChain nr.', chain.id, '\n')
 	if (verbose)
 		cat('************\n')
 	mcmc <- mcmc.list[[chain.id]]
 	mcmc$uncertainty <- uncertainty
-	mcmc$first.stage.directory <- first.stage.directory
 	
 	if (verbose) 
 		cat('MCMC sampling for additional countries and regions.\n')
 
 	mcmc <- tfr.mcmc.sampling.extra(mcmc, mcmc.list=mcmc.list, countries=countries, 
 									posterior.sample=posterior.sample, 
-									iter=iter, burnin=burnin, thin=thin, verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty, first.stage.directory=first.stage.directory)
+									iter=iter, burnin=burnin, thin=thin, verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty)
 	return(mcmc)
 }
 
