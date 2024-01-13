@@ -43,7 +43,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						first.stage.directory = NULL,
 						first.stage.burnin = NULL,
 						second.stage.uncertainty = FALSE,
-						covariate.filepath = here("data/covariates"), #***** DAPHNE: NEED TO UPDATE THIS
+						covariate.filepath = system.file("extdata", package = "bayesTFR"), 
 						# end Daphne
 						iso.unbiased = NULL, covariates = c('source', 'method'), cont_covariates = NULL, 
 						source.col.name="source",
