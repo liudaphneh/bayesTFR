@@ -353,7 +353,7 @@ find.raw.data.outliers <- function(raw.tfr, iso.unbiased, max.drop=1, max.increa
 #    - adds indicator for whether countries have available covariate data 
 #    - adds country-specific cluster membership for beta sampling
 #    - adds indicator for SSA membership
-covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = here("data/covariates")){
+covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = here("inst/extdata")){
   # import covariate data
   if(annual){
     #educ <- read.table(here("../Data", "bayestfr_educ_annual_20240107.txt"))
@@ -499,7 +499,7 @@ mcmc.meta.ini <- function(...,
 						first.stage.directory=NULL, 
 						first.stage.burnin=NULL,
 						second.stage.uncertainty=FALSE, 
-						covariate.filepath=here("data/covariates"), #***** DAPHNE NEEDS TO UPDATE THIS
+						covariate.filepath=here("inst/extdata"), #***** DAPHNE NEEDS TO UPDATE THIS
 						# end Daphne
 						my.tfr.raw.file=NULL, 
 						ar.phase2=FALSE, iso.unbiased=NULL, source.col.name = "source",
@@ -554,7 +554,7 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 						first.stage.directory=NULL, 
 						first.stage.burnin=NULL,
 						second.stage.uncertainty=FALSE, 
-						covariate.filepath=here("data/covariates"), #***** DAPHNE NEEDS TO UPDATE THIS
+						covariate.filepath=here("inst/extdata"), #***** DAPHNE NEEDS TO UPDATE THIS
 						# end Daphne
 						my.tfr.raw.file=NULL, 
 						ar.phase2=FALSE, iso.unbiased=NULL, source.col.name = "source") {
@@ -762,7 +762,7 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 					 first.stage.directory=NULL,
 					 first.stage.burnin=NULL,
 					 second.stage.uncertainty=FALSE,
-					 covariate.filepath=here("data/covariates"), #***** DAPHNE NEEDS TO UPDATE THIS
+					 covariate.filepath=here("inst/extdata"), #***** DAPHNE NEEDS TO UPDATE THIS
 					 # end Daphne
 					 save.all.parameters=FALSE,
 					 verbose=FALSE, uncertainty=FALSE, iso.unbiased=NULL,
