@@ -365,7 +365,8 @@ covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.
   } else{
     educ <- read.table(here("../../Conditional/Data", "educ_2_hier_X_minus_Xstar_20230114.txt"))
     fp <- read.table(here("../../Conditional/Data", "CP_X_minus_Xstar_20210210.txt"))
-    gdp <- read.table(here("../Data", "bayestfr_gdp_five_year_20231112.txt"))
+    #gdp <- read.table(here("../Data", "bayestfr_gdp_five_year_20231112.txt"))
+    gdp <- read.table(paste0(covariate.filepath, "/bayestfr_gdp_5pd.txt"))
   }
   
   ##### format to match tfr_matrix #####
@@ -762,6 +763,7 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 					 first.stage.directory=NULL,
 					 first.stage.burnin=NULL,
 					 second.stage.uncertainty=FALSE,
+					 sampled_iter.ini=0,
 					 covariate.filepath=system.file("extdata", package = "bayesTFR"),
 					 # end Daphne
 					 save.all.parameters=FALSE,
@@ -835,7 +837,7 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
    	beta_fp_SSA <- beta_fp_SSA.ini
    	beta_g_SSA <- beta_g_SSA.ini
    	bc_rho <- bc_rho.ini
-   	
+   	sampled_iter <- sampled_iter.ini
    	
    	dontsave.pars <- c('add_to_sd_Tc', 'const_sd_dummie_Tc', 'meta')
    	if(uncertainty) dontsave.pars <- c(dontsave.pars, 'meta3')
@@ -864,6 +866,8 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 						            first.stage.directory = first.stage.directory,
 						            first.stage.burnin = first.stage.burnin,
 				            		second.stage.uncertainty = second.stage.uncertainty,
+						            sampled_iter=sampled_iter,
+						            sampled_iter.ini=sampled_iter.ini,
 						            covariate.filepath=covariate.filepath,
 						            # end Daphne
                         iter=iter, finished.iter=1, length = 1,

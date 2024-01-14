@@ -47,6 +47,9 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
     
     suppl.T <- if(!is.null(mcmc$meta$suppl.data$regions)) mcmc$meta$suppl.data$T_end else 0
     
+    # Daphne: load in MCMC object from first stage of estimation
+    m.default <- get.tfr.mcmc(mcmc$meta$first.stage.directory)
+    
     if (uncertainty)
     {
       meta <- mcmc$meta
@@ -264,8 +267,6 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 
 	############ DAPHNE: load parameter traces from first.stage.directory ############
 	# in second stage, beta and rho_bc are sampled conditionally on the parameters of bayesTFR from the first stage of estimation
-	m.default <- get.tfr.mcmc(mcenv$meta$first.stage.directory)
-	
 	# load in the parameter traces from first.stage.directory, which contains a converged run of default (unconditional) bayesTFR
 	mean_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("mean_eps_tau"),
 	                                                burnin = mcenv$meta$first.stage.burnin)
@@ -284,8 +285,6 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 
 	# sample once from parameter traces for whole iter
 	iter.sample <- sample(1:nrow(delta.traces), size = nr_simu-start.iter+1, replace = TRUE)
-	# save sampled iterations as part of mcenv
-	mcenv$sampled_iter <- iter.sample
 
 	# country-specific parameters, including past TFR if second.stage.uncertainty = TRUE
 	# store samples as list, each country is separate element
@@ -331,7 +330,7 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
        #################################################################### 
         # 2. mean_eps_tau sd_eps_tau: gibbs step
         ##################################################################
-
+        
         mcenv$mean_eps_tau <- mean_eps_tau.traces[iter.sample[iter.idx]]
         mcenv$sd_eps_tau <- sd_eps_tau.traces[iter.sample[iter.idx]]
 
@@ -544,6 +543,10 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
          mcenv$beta_e_SSA <- mv.sample[4]
          mcenv$beta_fp_SSA <- mv.sample[5]
          mcenv$beta_g_SSA <- mv.sample[6]
+         
+         # save sampled iterations of first stage's TFR as part of mcenv
+         mcenv$sampled_iter <- ifelse(mcenv$second.stage.uncertainty, 
+                                      iter.sample[iter.idx], 0)
          
          # update eps_T after all parameters are estimated for this iter
          beta_for_eps_T <- c(mcenv$beta_e, mcenv$beta_fp, mcenv$beta_g, 

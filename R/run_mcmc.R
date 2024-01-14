@@ -5,6 +5,7 @@
 #          -> if FALSE, uses values of TFR from my.tfr.file
 #          -> if TRUE, uses estimated past TFR from first.stage.directory
 #          -> if TRUE but first.stage.directory was run with uncertainty = FALSE, defaults to using values of TFR from my.tfr.file
+#    - sampled_iter = iterations of TFR trajectories that were sampled in second stage
 #    - covariate.filepath = file path to folder where covariate input data is saved
 run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 'bayesTFR.output'), 
 						thin=1, replace.output=FALSE, annual = FALSE, uncertainty = FALSE, 
@@ -43,6 +44,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						first.stage.directory = NULL,
 						first.stage.burnin = NULL,
 						second.stage.uncertainty = FALSE,
+						sampled_iter.ini = NULL,
 						covariate.filepath = system.file("extdata", package = "bayesTFR"), 
 						# end Daphne
 						iso.unbiased = NULL, covariates = c('source', 'method'), cont_covariates = NULL, 
@@ -125,6 +127,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	  beta_g_SSA.ini <- rep(0, nr.chains)
 	if (missing(bc_rho.ini) || is.null(bc_rho.ini)) 
 	  bc_rho.ini <- rep(0, nr.chains)
+	if (missing(sampled_iter.ini) || is.null(sampled_iter.ini)) 
+	  sampled_iter.ini <- rep(0, nr.chains)
 	# end Daphne
 	
 	bayesTFR.mcmc.meta <- mcmc.meta.ini(
@@ -157,6 +161,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						first.stage.directory = first.stage.directory,
 						first.stage.burnin = first.stage.burnin,
 						second.stage.uncertainty = second.stage.uncertainty,
+						sampled_iter.ini = sampled_iter.ini,
 						covariate.filepath = covariate.filepath,
 						# end Daphne
 					 	proposal_cov_gammas = proposal_cov_gammas,
@@ -241,8 +246,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	}
 	
 	# propagate initial values for all chains if needed
-	# Daphne: added beta.ini, bc_rho.ini
-	for (var in c('S.ini', 'a.ini', 'b.ini', 'sigma0.ini', 'const.ini', 'gamma.ini', 'Triangle_c4.ini', 'beta_e.ini', 'beta_fp.ini', 'beta_g.ini', 'beta_e_SSA.ini', 'beta_fp_SSA.ini', 'beta_g_SSA.ini',  'bc_rho.ini', 'iter')) {
+	# Daphne: added beta.ini, bc_rho.ini, sampled_iter
+	for (var in c('S.ini', 'a.ini', 'b.ini', 'sigma0.ini', 'const.ini', 'gamma.ini', 'Triangle_c4.ini', 'beta_e.ini', 'beta_fp.ini', 'beta_g.ini', 'beta_e_SSA.ini', 'beta_fp_SSA.ini', 'beta_g_SSA.ini',  'bc_rho.ini', 'sampled_iter.ini', 'iter')) {
 		if (length(get(var)) < nr.chains) {
 			if (length(get(var)) == 1) {
 				assign(var, rep(get(var), nr.chains))
@@ -266,6 +271,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						first.stage.directory=first.stage.directory,
 						first.stage.burnin=first.stage.burnin,
 						second.stage.uncertainty=second.stage.uncertainty,
+						sampled_iter.ini=sampled_iter.ini,
 						covariate.filepath=covariate.filepath,
 						# end Daphne
 						gamma.ini=gamma.ini, save.all.parameters=save.all.parameters, verbose=verbose, 
@@ -285,6 +291,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 					 	first.stage.directory=first.stage.directory,
 					 	first.stage.burnin=first.stage.burnin,
 					 	second.stage.uncertainty=second.stage.uncertainty,
+					 	sampled_iter.ini=sampled_iter.ini,
 					 	covariate.filepath=covariate.filepath,
 					 	# end Daphne
 					 	gamma.ini=gamma.ini, save.all.parameters=save.all.parameters,
@@ -326,6 +333,7 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
 							first.stage.directory,
 							first.stage.burnin,
 							second.stage.uncertainty,
+							sampled_iter.ini,
 							covariate.filepath,
 							# end Daphne
 							gamma.ini=1,
@@ -343,12 +351,13 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
     			# Daphne
     			beta_e.ini[chain.id], beta_fp.ini[chain.id], beta_g.ini[chain.id],
     			beta_e_SSA.ini[chain.id], beta_fp_SSA.ini[chain.id], beta_g_SSA.ini[chain.id],
-    			bc_rho.ini[chain.id],
+    			bc_rho.ini[chain.id], 
+    			sampled_iter.ini[chain.id],
     			# end Daphne
     			gamma.ini[chain.id]
     			)
-    	# Daphne: added beta, bc_rho
-    	names(sv) <- c('S', 'a', 'b', 'sigma0', 'Triangle_c4', 'const', 'beta_e', 'beta_fp', 'beta_g', 'beta_e_SSA', 'beta_fp_SSA', 'beta_g_SSA', 'bc_rho', 'gamma')
+    	# Daphne: added beta, bc_rho, sampled_iter
+    	names(sv) <- c('S', 'a', 'b', 'sigma0', 'Triangle_c4', 'const', 'beta_e', 'beta_fp', 'beta_g', 'beta_e_SSA', 'beta_fp_SSA', 'beta_g_SSA', 'bc_rho', 'sampled_iter', 'gamma')
     	print(sv)
     }
 
@@ -370,6 +379,7 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
                    first.stage.directory=first.stage.directory,
                    first.stage.burnin=first.stage.burnin,
                    second.stage.uncertainty=second.stage.uncertainty,
+                   sampled_iter.ini=sampled_iter.ini[chain.id],
                    covariate.filepath=covariate.filepath,
                    # end Daphne
                    gamma.ini=gamma.ini[chain.id],

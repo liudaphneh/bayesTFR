@@ -629,7 +629,7 @@ bdem.parameter.traces.bayesTFR.mcmc <- function(mcmc, par.names, ...) {
 	
 }
 
-# DAPHNE: add beta and bc_rho
+# DAPHNE: add beta and bc_rho and sampled_iter
 get.all.parameter.names <- function() {
     # First element in each tuple indicates if the parameter is transformable, 
     # the second how many values it has.
@@ -642,7 +642,8 @@ get.all.parameter.names <- function() {
 				beta_g=c(FALSE,1), 
 				beta_e_SSA=c(FALSE,1), beta_fp_SSA=c(FALSE,1),
 				beta_g_SSA=c(FALSE,1), 
-				bc_rho=c(FALSE,1)
+				bc_rho=c(FALSE,1),
+				sampled_iter=c(FALSE,1)
 				))
 }				
 
