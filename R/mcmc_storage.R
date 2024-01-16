@@ -175,6 +175,7 @@ store.mcmc <- local({
 
 })
 
+# Daphne edited to account for second.stage.uncertainty
 store.mcmc3 <- local({
 	# Writes parameter values into ascii files - one file per parameter and country (if country-specific)
 	##########################
@@ -217,15 +218,15 @@ store.mcmc3 <- local({
 		counter3 <<- 0
 	}
 	
+	# Daphne edited to account for second.stage.uncertainty
 	do.flush.buffers <- function(mcmc, append=FALSE, countries=NULL, verbose=FALSE) {
 	  if (verbose)
 			cat("Flushing results into disk.\n")
-	  if (!is.null(mcmc$uncertainty) && (mcmc$uncertainty) )
-	  {
+	  if (!is.null(mcmc$uncertainty) && (mcmc$uncertainty) ){
 	    output.dir <- file.path(mcmc$meta$output.dir, "phaseIII", mcmc$output.dir)
-	  }
-	  else
-	  {
+	  } else if(!is.null(mcmc$second.stage.uncertainty) && (mcmc$second.stage.uncertainty)){
+	    output.dir <- file.path(mcmc$meta$output.dir, "phaseIII", mcmc$output.dir)
+	  } else {
 	    output.dir <- file.path(mcmc$meta$output.dir, mcmc$output.dir)
 	  }
 	  if(!file.exists(output.dir)) 
@@ -248,9 +249,19 @@ store.mcmc3 <- local({
 			for (country in country.index){
 				values <- if (counter3 == 1) t(buffer3.cs[[par]][[country]][1:counter3,])
 							else buffer3.cs[[par]][[country]][1:counter3,]
-				write.values.into.file.cdep(par, values, output.dir, 
-						get.country.object(mcmc$meta$id_phase3[country], meta=mcmc$meta$parent, index=TRUE)$code, mode=open, 
-											compression.type=mcmc$compression.type)
+				# Daphne: edited so get.country.object call depends on second.stage.uncertainty
+				if(mcmc$second.stage.uncertainty){
+				  m.default <- get.tfr.mcmc(mcmc$first.stage.directory)
+				  write.values.into.file.cdep(par, values, output.dir, 
+				                              get.country.object(mcmc$meta$id_phase3[country], 
+				                                                 meta=m.default$meta, index=TRUE)$code, 
+				                              mode=open, compression.type=mcmc$compression.type)
+				} else{
+				  write.values.into.file.cdep(par, values, output.dir, 
+				                              get.country.object(mcmc$meta$id_phase3[country], 
+				                                                 meta=mcmc$meta$parent, index=TRUE)$code, 
+				                              mode=open, compression.type=mcmc$compression.type)
+				}
 			}
 		}
 		resmc <- as.list(mcmc)

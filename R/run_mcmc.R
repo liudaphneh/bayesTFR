@@ -175,6 +175,12 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	  bayesTFR.mcmc.meta[["covariates"]] <- covariates
 	  bayesTFR.mcmc.meta[["cont_covariates"]] <- cont_covariates
 	}
+	# Daphne:
+	if(second.stage.uncertainty)
+	{
+	  bayesTFR.mcmc.meta[["covariates"]] <- m.default$meta$covaraites
+	  bayesTFR.mcmc.meta[["cont_covariates"]] <- m.default$meta$cont_covariates
+	}
 	store.bayesTFR.meta.object(bayesTFR.mcmc.meta, output.dir)
 	
 	starting.values <- NULL
@@ -244,6 +250,75 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	    if (var != 'iter') starting.values[[var]] <- get(var)
 	  }
 	}
+	# Daphne: initialize Phase III if using second.stage.uncertainty
+	if (second.stage.uncertainty)
+	{
+	  get.init.values <- function(range) {
+	    ifelse(rep(nr.chains==1, nr.chains), sum(range)/2, 
+	           #seq(range[1], to=range[2], length=nr.chains)
+	           runif(nr.chains, range[1], range[2])
+	    )
+	  }
+	  
+	  dir.create(file.path(output.dir, 'phaseIII'))
+	  mu.prior.range <- m.default$meta$mu.prior.range
+	  rho.prior.range <- m.default$meta$rho.prior.range
+	  sigma.mu.prior.range <- m.default$meta$sigma.mu.prior.range
+	  sigma.rho.prior.range <- m.default$meta$sigma.rho.prior.range
+	  sigma.eps.prior.range <- m.default$meta$sigma.eps.prior.range
+	  mu.ini <- m.default$meta$mu.ini
+	  rho.ini <- m.default$meta$rho.ini
+	  sigma.mu.ini <- m.default$meta$sigma.mu.ini
+	  sigma.rho.ini <- m.default$meta$sigma.rho.ini
+	  sigma.eps.ini <- m.default$meta$sigma.eps.ini
+	  
+	  for (varname in c('mu', 'rho', 'sigma.mu', 'sigma.rho', 'sigma.eps'))
+	  {
+	    assign(paste0(varname, '.ini.range'), get(paste0(varname, '.prior.range')))
+	    if (paste0(varname, '.ini') %in% names(phase3.starting.values))
+	    {
+	      assign(paste0(varname, '.ini'), phase3.starting.values[[paste0(varname, '.ini')]])
+	    }
+	    else
+	    {
+	      #assign(paste0(varname, '.ini'), get.init.values(get(paste0(varname, '.prior.range'))))
+	      assign(paste0(varname, '.ini'), get(paste0(varname, '.ini')))
+	    }
+	  }
+	  
+	  c.index <- 1:get.nr.countries(m.default$meta)
+	  meta <- structure(list(nr.chains=nr.chains,
+	                         my.tfr.file=my.tfr.file, output.dir=output.dir,
+	                         phase=3, id_phase3 = m.default$meta$id_phase3,
+	                         nr.countries=m.default$meta$nr.countries,
+	                         mu.prior.range=mu.prior.range, rho.prior.range=rho.prior.range,
+	                         sigma.mu.prior.range=sigma.mu.prior.range, 
+	                         sigma.rho.prior.range=sigma.rho.prior.range,
+	                         sigma.eps.prior.range=sigma.eps.prior.range,
+	                         mu.ini = get("mu.ini"), mu.ini.range=get("mu.ini.range"), 
+	                         rho.ini=get("rho.ini"), rho.ini.range=get("rho.ini.range"), 
+	                         sigma.mu.ini=get("sigma.mu.ini"), sigma.mu.ini.range=get("sigma.mu.ini.range"),
+	                         sigma.rho.ini=get("sigma.rho.ini"), sigma.rho.ini.range=get("sigma.rho.ini.range"),
+	                         sigma.eps.ini=get("sigma.eps.ini"), sigma.eps.ini.range=get("sigma.eps.ini.range"),
+	                         compression.type=compression.type, buffer.size=buffer.size, auto.conf=auto.conf
+	  ), class='bayesTFR.mcmc.meta')	
+	  store.bayesTFR.meta.object(meta, file.path(output.dir, 'phaseIII'))
+	  if(meta$nr.countries <= 0) run.phase3 <- FALSE else run.phase3 <- TRUE
+	  for (name in names(meta))
+	  {
+	    if (!(name %in% names(bayesTFR.mcmc.meta)))
+	    {
+	      bayesTFR.mcmc.meta[[name]] <- meta[[name]]
+	    }
+	  }
+	  bayesTFR.mcmc.meta$run.phase3 <- run.phase3
+	  bayesTFR.mcmc.meta$parent <- bayesTFR.mcmc.meta
+	  for (var in c('mu.ini', 'rho.ini', 'sigma.mu.ini', 'sigma.rho.ini', 'sigma.eps.ini', 'iter')) {
+	    if (length(get(var)) < nr.chains) 
+	      assign(var, rep(get(var), nr.chains)[1:nr.chains])
+	    if (var != 'iter') starting.values[[var]] <- get(var)
+	  }
+	}
 	
 	# propagate initial values for all chains if needed
 	# Daphne: added beta.ini, bc_rho.ini, sampled_iter
@@ -257,7 +332,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 				assign(var, rep(get(var)[1], nr.chains))
 				}
 			}
-	}
+	} 
 	if (parallel) { # run chains in parallel
 		chain.set <- bDem.performParallel(nr.nodes, 1:nr.chains, mcmc.run.chain, 
 						initfun=init.nodes, seed = seed, meta=bayesTFR.mcmc.meta, 
@@ -387,7 +462,8 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
 	                 verbose=verbose, uncertainty=uncertainty, iso.unbiased=iso.unbiased, 
 	                 covariates=covariates, cont_covariates=cont_covariates,
                    source.col.name=source.col.name)
-	if (uncertainty)
+  # Daphne edited below to be uncertainty OR second.stage.uncertainty
+	if (uncertainty | second.stage.uncertainty)
 	{
 	  this.sv <- list()
 	  for(var in names(starting.values)) {
@@ -412,8 +488,8 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
 		cat('Store initial values into ', mcmc$output.dir, '\n')
 
 	store.mcmc(mcmc, append=FALSE, flush.buffer=TRUE, verbose=verbose)
-	if (uncertainty) store.mcmc3(mcmc, append=FALSE, flush.buffer=TRUE, verbose=verbose)
-	
+	# Daphne edited below to be uncertainty OR second.stage.uncertainty
+	if (uncertainty | second.stage.uncertainty) store.mcmc3(mcmc, append=FALSE, flush.buffer=TRUE, verbose=verbose)
 	if (verbose) 
 		cat('Start sampling -', mcmc$iter, 'iterations in total.\n')
 	mcmc <- tfr.mcmc.sampling(mcmc, thin=thin, verbose=verbose, verbose.iter=verbose.iter, uncertainty=uncertainty)

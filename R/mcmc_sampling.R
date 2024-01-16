@@ -49,6 +49,9 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
     
     # Daphne: load in MCMC object from first stage of estimation
     m.default <- get.tfr.mcmc(mcmc$meta$first.stage.directory)
+    if (mcmc$meta$second.stage.uncertainty){
+      m.default.3 <- get.tfr3.mcmc(mcmc$meta$first.stage.directory)
+    }
     
     if (uncertainty)
     {
@@ -67,9 +70,10 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
       mcmc$recompute.mu.integral <- TRUE
       mcmc$recompute.rho.integral <- TRUE
     }
+
     mcenv <- as.environment(mcmc) # Create an environment for the mcmc stuff in order to avoid 
 					   			  # copying of the mcmc list 
-    
+
     mcenv$thin <- thin
     ones <- matrix(1, ncol=nr_DL, nrow=3)
     
@@ -282,11 +286,32 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 	                                         burnin = mcenv$meta$first.stage.burnin)
 	delta.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("delta"),
 	                                         burnin = mcenv$meta$first.stage.burnin)
+	
+	# if using Phase II AR(1) 
+	if(!is.null(mcenv$meta$ar.phase2) && mcenv$meta$ar.phase2){
+	  rho_phase2.traces <- get.tfr.parameter.traces(m.default$mcmc.list, "rho_phase2", 
+	                                                burnin = mcenv$meta$first.stage.burnin)
+	}
+	
+	# if m.default used uncertainty = TRUE, also get the Phase III traces
+	if(mcenv$second.stage.uncertainty){
+	  mu.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("mu"), 
+	                                         burnin = mcenv$meta$first.stage.burnin)
+	  rho.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("rho"), 
+	                                          burnin = mcenv$meta$first.stage.burnin)
+	  sigma.mu.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("sigma.mu"), 
+	                                               burnin = mcenv$meta$first.stage.burnin)
+	  sigma.rho.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("sigma.rho"), 
+	                                                burnin = mcenv$meta$first.stage.burnin)
+	  sigma.eps.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("sigma.eps"), 
+	                                                burnin = mcenv$meta$first.stage.burnin)
+	}
 
 	# sample once from parameter traces for whole iter
 	iter.sample <- sample(1:nrow(delta.traces), size = nr_simu-start.iter+1, replace = TRUE)
 
-	# country-specific parameters, including past TFR if second.stage.uncertainty = TRUE
+	# country-specific parameters for Phase II
+	# including past TFR if second.stage.uncertainty = TRUE
 	# store samples as list, each country is separate element
 	d.samples <- list()
 	gamma.samples <- list()
@@ -305,6 +330,19 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 	  if(mcenv$second.stage.uncertainty){
 	    tfr.year <- seq(m.default$meta$start.year, m.default$meta$present.year)
 	    tfr.samples[[country]] <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = country.i.obj, par.names = c("tfr"), burnin = mcenv$meta$first.stage.burnin)[iter.sample, which(tfr.year %in% rownames(mcenv$meta$tfr_matrix))]
+	  }
+	}
+
+	# country-specific parameters for Phase III 
+	# store samples as list, each country is separate element
+	if(mcenv$second.stage.uncertainty){
+	  mu.c.samples <- list()
+	  rho.c.samples <- list()
+	  for(country in 1:mcenv$meta$nr.countries){
+	    country.i.obj <- get.country.object(m.default.3$meta$id_phase3[country], meta = m.default.3$meta, index = TRUE)
+	    country.traces <- get.tfr3.parameter.traces.cs(m.default.3$mcmc.list, country.obj = country.i.obj, par.names = c("mu.c", "rho.c"), burnin = mcenv$meta$first.stage.burnin)
+	    mu.c.samples[[country]] <- country.traces[iter.sample, 1]
+	    rho.c.samples[[country]] <- country.traces[iter.sample, 2]
 	  }
 	}
 
@@ -352,14 +390,7 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 
         if (!is.null(mcenv$meta$ar.phase2) && mcenv$meta$ar.phase2)
         {
-          #mcmc.update.rho.phase2(mcenv, matrix.name=matrix.name, trace.sample = iter.sample[iter.idx], m.default = m.default, first.stage.burnin = mcenv$meta$first.stage.burnin)
-          ## mcenv$rho.phase2 <- 0.7
-          var.value <- mcenv$rho.phase2
-          var.low <- 0
-          var.up <- 0.9
-          var.width <- 0.1
-          
-          var_prop <- get.tfr.parameter.traces(m.default$mcmc.list, "rho_phase2", burnin = mcenv$meta$first.stage.burnin)[iter.sample[iter.idx]]
+          var_prop <- rho_phase2.traces[iter.sample[iter.idx]]
           # update eps_T based on second.stage.uncertainty
           if(mcenv$second.stage.uncertainty){
             suppl.T.tmp <- if(!is.null(mcenv$meta$suppl.data$regions)) mcenv$meta$suppl.data$T_end else 0
@@ -377,10 +408,10 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
                 raw.outliers <- sort(unique(c(raw.outliers, raw.outliers+1)))
               idx <- setdiff(idx, raw.outliers)
 
-              eps_prop[idx, country] <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+              eps_prop[idx, country] <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=var_prop)
             }
           } else{
-            eps_prop <- get_eps_T_all(mcenv, matrix.name=matrix.name, rho.phase2=mcenv$rho.phase2)
+            eps_prop <- get_eps_T_all(mcenv, matrix.name=matrix.name, rho.phase2=var_prop)
           }
           
           mcenv$rho.phase2 <- var_prop
@@ -399,7 +430,11 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
           ##### D
           theta_prop <-  c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
           d_prop <- d.samples[[country]][iter.idx]
-          eps_T_prop <- get.eps.T(c(theta_prop[-5], d_prop), beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          if(mcenv$second.stage.uncertainty){
+            eps_T_prop <- get.eps.T(c(theta_prop[-5], d_prop), beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          } else{
+            eps_T_prop <- get.eps.T(c(theta_prop[-5], d_prop), beta_prop, tfr_trace = NULL, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          }
           
           mcenv$eps_Tc[idx, country] <- eps_T_prop
           mcenv$d_c[country] <- d_prop
@@ -409,7 +444,11 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
           pci_prob <- exp(gamma_prop)/sum(exp(gamma_prop))
           theta_prop <- c(pci_prob*(mcenv$U_c[country] - mcenv$Triangle_c4[country]), 
                           mcenv$Triangle_c4[country], mcenv$d_c[country]) 
-          eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          if(mcenv$second.stage.uncertainty){
+            eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          } else{
+            eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = NULL, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          }
           
           mcenv$gamma_ci[country,] <- gamma_prop
           mcenv$eps_Tc[idx, country] <- eps_T_prop
@@ -417,7 +456,12 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
           ##### TRIANGLEC4
           Triangle_c4_prop <- Trianglec4.samples[[country]][iter.idx]
           theta_prop <-  c((mcenv$U_c[country]-Triangle_c4_prop)*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), Triangle_c4_prop, mcenv$d_c[country])
-          eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          if(mcenv$second.stage.uncertainty){
+            eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          } else{
+            eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = NULL, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+          }
+
           mcenv$eps_Tc[idx, country] <- eps_T_prop
           mcenv$Triangle_c4[country] <- Triangle_c4_prop
         }
@@ -429,7 +473,11 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
            theta_prop <-  c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
            U_prop <- U.samples[[country]][iter.idx]
            theta_prop[1:3] <- theta_prop[1:3]/(mcenv$U_c[country] - mcenv$Triangle_c4[country])*(U_prop - mcenv$Triangle_c4[country])
-           eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+           if(mcenv$second.stage.uncertainty){
+             eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+           } else{
+             eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = NULL, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+           }
            
            mcenv$eps_Tc[start_idx:(mcenv$meta$lambda_c[country]-1), country] <- eps_T_prop
            mcenv$U_c[country] <- U_prop
@@ -508,9 +556,9 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
          } # else, reject (mcenv$bc_rho does not chage)
          
          # check acceptance rate at end of each chain
-         if(rho.n.iter == (nr_simu-1)){
-           print(paste("acceptance rate =", rho.accept/rho.n.iter))
-         }
+         # if(rho.n.iter == (nr_simu-1)){
+         #   print(paste("acceptance rate =", rho.accept/rho.n.iter))
+         # }
          
          #### beta: Gibbs step ####
          # multivariate posterior of beta, using correlation matrix R 
@@ -553,9 +601,13 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
                              mcenv$beta_e_SSA, mcenv$beta_fp_SSA, mcenv$beta_g_SSA)
          for(country in id_DL_all){
            theta_for_eps_T <-  c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
-           
            start_idx <- max(mcenv$meta$start_c[country], mcenv$meta$start_cov_data_c[country])
-           mcenv$eps_Tc[start_idx:(mcenv$meta$lambda_c[country]-1), country] <- get.eps.T(theta_for_eps_T, beta_for_eps_T, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+           if(mcenv$second.stage.uncertainty){
+             temp_eps <- get.eps.T(theta_for_eps_T, beta_for_eps_T, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+           } else{
+             temp_eps <- get.eps.T(theta_for_eps_T, beta_for_eps_T, tfr_trace = NULL, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+           }
+           mcenv$eps_Tc[start_idx:(mcenv$meta$lambda_c[country]-1), country] <- temp_eps
          }
          
 
@@ -569,6 +621,22 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
            
            mcmc.update.tfr.year(mcenv)
          }
+
+         # Daphne: if using second.stage.uncertainty, need to update Phase III here
+         if (mcenv$second.stage.uncertainty){
+           mcenv$mu <- mu.traces[iter.sample[iter.idx]]
+           mcenv$rho <- rho.traces[iter.sample[iter.idx]]
+           mcenv$sigma.mu <- sigma.mu.traces[iter.sample[iter.idx]]
+           mcenv$sigma.rho <- sigma.rho.traces[iter.sample[iter.idx]]
+           mcenv$sigma.eps <- sigma.eps.traces[iter.sample[iter.idx]]
+           
+           for(country in 1:mcenv$meta$nr.countries){
+             mcenv$mu.c[country] <- mu.c.samples[[country]][iter.idx]
+             mcenv$rho.c[country] <- rho.c.samples[[country]][iter.idx]
+           }
+           
+           # mcmc.update.tfr.year(mcenv)
+         }
          ################################################################### 
          # write samples simu/thin to disk
          ##################################################################
@@ -580,7 +648,8 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
            flush.buffer <- FALSE
            if (simu + thin > nr_simu) flush.buffer <- TRUE
            store.mcmc(mcenv, append=TRUE, flush.buffer=flush.buffer, verbose=verbose)
-           if (uncertainty) store.mcmc3(mcenv, append=TRUE, flush.buffer=flush.buffer, verbose=verbose)
+           # Daphne: edited to be uncertainty OR second.stage.uncertainty
+           if (uncertainty | mcenv$second.stage.uncertainty) store.mcmc3(mcenv, append=TRUE, flush.buffer=flush.buffer, verbose=verbose)
          }
 	}       # end simu loop MCMC
 	.cleanup.mcmc(mcenv)
@@ -715,7 +784,6 @@ unblock.gtk <- function(option, options.list=NULL) {
 
 }
 
-# DAPHNE: 20230903 need to update the sampling steps within this still
 tfr.mcmc.sampling.extra <- function(mcmc, mcmc.list, countries, posterior.sample,
 											 iter=NULL, thin = 1, burnin=2000, verbose=FALSE, verbose.iter=100, uncertainty=FALSE) {
 	#run mcmc sampling for countries given by the index 'countries'

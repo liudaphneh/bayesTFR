@@ -75,45 +75,6 @@ get.eps.T <- function (DLpar, betapar, tfr_trace = NULL, country, meta, ...)
   return (eps)
 }
 
-# original version of get.eps.T with no tfr_trace
-get.eps.T.OLD <- function (DLpar, betapar, country, meta, ...) 
-{
-  # Daphne: if we have NAs, then start of Phase II will be earlier then start of covariate data
-  start_idx <- max(meta$start_c[country], meta$start_cov_data_c[country])
-  
-  tfr <- get.observed.tfr(country, meta, ...)[start_idx:meta$lambda_c[country]]
-  ldl <- length(tfr)-1
-  dl <- DLcurve(DLpar, tfr[1:ldl], meta$dl.p1, meta$dl.p2, annual = meta$annual.simulation)
-  
-  # Daphne: covariate term
-  educ.c <- meta$educ[start_idx:meta$lambda_c[country], country][1:ldl]
-  fp.c <- meta$fp[start_idx:meta$lambda_c[country], country][1:ldl]
-  gdp.c <- meta$gdp[start_idx:meta$lambda_c[country], country][1:ldl]
-  SSA.c <- meta$SSA_indicator[country]
-  covariate_contr <- betapar[1]*educ.c + betapar[2]*fp.c + betapar[3]*gdp.c +
-    betapar[4]*educ.c*SSA.c + betapar[5]*fp.c*SSA.c + betapar[6]*gdp.c*SSA.c
-  
-  # Daphne: add covariate term to eps calculation
-  eps <- tfr[2:(ldl+1)] - tfr[1:ldl] + dl - covariate_contr
-  if (!is.null(meta$ar.phase2) && meta$ar.phase2) 
-  {
-    args <- list(...)
-    if ('rho.phase2' %in% names(args) && length(eps) > 1) eps <- c(eps[1], eps[2:ldl]-args[['rho.phase2']] * eps[1:(ldl-1)])
-  }
-  
-  # Put NAs on eps indexed by meta$indices.outliers[[country]]
-  if (as.character(country) %in% names(meta$indices.outliers))
-  {
-    outlier_indices <- meta$indices.outliers[[as.character(country)]]
-    if (!is.null(meta$ar.phase2) && meta$ar.phase2)
-      outlier_indices <- sort(unique(c(outlier_indices, outlier_indices+1)))
-    
-    eps <- eps[-outlier_indices]
-  }
-  
-  return (eps)
-}
-
 # DAPHNE
 #    - modified to account for covariate term in eps calculation
 #    - and to handle tfr_trace needed for get.eps.T
@@ -140,34 +101,6 @@ get_eps_T_all <- function (mcmc, ...) {
     eps_Tc[idx, country] <- get.eps.T(theta, beta, tfr_trace = NULL, country, mcmc$meta, ...)
   }
 	
-  return(eps_Tc)
-}
-
-# original version of get_eps_T with no tfr_trace
-get_eps_T_all_OLD <- function (mcmc, ...) {
-  suppl.T <- if(!is.null(mcmc$meta$suppl.data$regions)) mcmc$meta$suppl.data$T_end else 0
-  eps_Tc <- matrix(NA, mcmc$meta$T_end-1 + suppl.T, mcmc$meta$nr_countries)
-  
-  # Daphne: load in beta
-  beta <- c(mcmc$beta_e, mcmc$beta_fp, mcmc$beta_g, mcmc$beta_e_SSA, mcmc$beta_fp_SSA, mcmc$beta_g_SSA)
-  
-  for (country in mcmc$meta$id_DL){
-    if(country == 86){browser()}
-    theta <- c((mcmc$U_c[country]-mcmc$Triangle_c4[country])*exp(mcmc$gamma_ci[country,])/                                     
-                 sum(exp(mcmc$gamma_ci[country,])), mcmc$Triangle_c4[country], mcmc$d_c[country])
-    
-    # Daphne: modify idx since if we have NAs, then start of Phase II will be earlier than the start of covariate data
-    start_idx <- max(mcmc$meta$start_c[country], mcmc$meta$start_cov_data_c[country])
-    idx <- start_idx:(mcmc$meta$lambda_c[country]-1)
-    raw.outliers <- mcmc$meta$indices.outliers[[as.character(country)]]
-    if (!is.null(mcmc$meta$ar.phase2) && mcmc$meta$ar.phase2) 
-      raw.outliers <- sort(unique(c(raw.outliers, raw.outliers+1)))
-    idx <- setdiff(idx, raw.outliers)
-    
-    # Daphne: added beta argument
-    eps_Tc[idx, country] <- get.eps.T(theta, beta, country, mcmc$meta, ...)
-  }
-  
   return(eps_Tc)
 }
 
@@ -735,7 +668,37 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 	    output$id_phase2_by_year[[year]] <- setdiff(1:nr_countries, c(output$id_phase1_by_year[[year]], output$id_phase3_by_year[[year]]))
 	  }
 	}
-	
+
+	# Daphne: Phase III steps if using second.stage.uncertainty
+	if(second.stage.uncertainty)
+	{
+	  m.default <- get.tfr.mcmc(sim.dir = first.stage.directory)
+	  
+	  output$raw_data.original <- m.default$meta$raw_data.original
+	  output$indices.outliers <- m.default$meta$indices.outliers
+	  output$yearly.outliers <- m.default$meta$yearly.outliers
+
+	  if (meta$annual.simulation)
+	  {
+	    output$raw_data.original$year <- m.default$meta$raw_data.original$year
+	    output$country.ind.by.year <- m.default$meta$country.ind.by.year
+	    output$ind.by.year <- m.default$meta$ind.by.year
+	  }
+	  else
+	  {
+	    output$country.ind.by.year <- m.default$meta$country.ind.by.year
+	    output$ind.by.year <- m.default$meta$ind.by.year
+	    output$left.distance <- m.default$meta$left.distance
+	  }
+	  
+	  output$tfr_all <- m.default$meta$tfr_all
+	  output$tfr_mu_all <- m.default$meta$tfr_mu_all
+	  output$tfr_sd_all <- m.default$meta$tfr_sd_all
+	  output$id_phase1_by_year <- m.default$meta$id_phase1_by_year
+	  output$id_phase2_by_year <- m.default$meta$id_phase2_by_year
+	  output$id_phase3_by_year <- m.default$meta$id_phase3_by_year
+	}
+
 	if (meta$annual.simulation) output$ar.phase2 <- ar.phase2
 	
 	return(output)
@@ -840,7 +803,8 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
    	sampled_iter <- sampled_iter.ini
    	
    	dontsave.pars <- c('add_to_sd_Tc', 'const_sd_dummie_Tc', 'meta')
-   	if(uncertainty) dontsave.pars <- c(dontsave.pars, 'meta3')
+   	# Daphne edited to be uncertainty OR second.stage.uncertainty
+   	if(uncertainty | second.stage.uncertainty) dontsave.pars <- c(dontsave.pars, 'meta3')
     if (!save.all.parameters) dontsave.pars <- c(dontsave.pars, 'eps_Tc')
     if (!exists(".Random.seed")) runif(1)	    	
 	mcmc <- structure(list(
