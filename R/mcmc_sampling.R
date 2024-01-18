@@ -52,6 +52,9 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
     if (mcmc$meta$second.stage.uncertainty){
       m.default.3 <- get.tfr3.mcmc(mcmc$meta$first.stage.directory)
     }
+    if (mcmc$meta$second.stage.uncertainty){
+      m.default.3 <- get.tfr3.mcmc(mcmc$meta$first.stage.directory)
+    }
     
     if (uncertainty)
     {
