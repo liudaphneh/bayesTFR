@@ -8,7 +8,9 @@ tfr.predict <- function(mcmc.set=NULL, end.year=2100,
 						min.tfr=0.5, use.correlation=FALSE,
 						save.as.ascii=0, output.dir = NULL,
 						low.memory=TRUE,
-						seed=NULL, verbose=TRUE, uncertainty=FALSE, ...) {
+						seed=NULL, verbose=TRUE, uncertainty=FALSE,
+						scenario = "reference", # Daphne
+						...) {
 	if(!is.null(mcmc.set)) {
 		if (!inherits(mcmc.set, 'bayesTFR.mcmc.set')) {
 			stop('Wrong type of mcmc.set. Must be of type bayesTFR.mcmc.set.')
@@ -55,7 +57,9 @@ tfr.predict <- function(mcmc.set=NULL, end.year=2100,
 					start.year=start.year, nr.traj=nr.traj, burnin=burnin, thin=thin, use.tfr3=has.phase3, burnin3=burnin3,
 					mu=mu, rho=rho,  sigmaAR1 = sigmaAR1, min.tfr=min.tfr, use.correlation=use.correlation,
 					save.as.ascii=save.as.ascii,
-					output.dir=output.dir, verbose=verbose, uncertainty=uncertainty, ...))			
+					output.dir=output.dir, verbose=verbose, uncertainty=uncertainty, 
+					scenario=scenario, # Daphne
+					...))			
 }
 
 .find.burnin.nr.traj.from.diag <- function(diag.list, verbose = FALSE) {
@@ -176,7 +180,10 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 							    save.as.ascii=0, output.dir = NULL, write.summary.files=TRUE, 
 							    is.mcmc.set.thinned=FALSE, force.creating.thinned.mcmc=FALSE,
 							    write.trajectories=TRUE, 
-							    verbose=verbose, uncertainty=FALSE, all.countries.required = TRUE){
+							    verbose=verbose, uncertainty=FALSE, 
+								all.countries.required = TRUE, 
+								scenario = "reference" # Daphne
+								){
 	# if 'countries' is given, it is an index
 	# sigmaAR1 can be a vector. The last element will be repeated up to nr.projections
     meta <- mcmc.set$meta
@@ -224,6 +231,9 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 		if(!file.exists(outdir)) 
 			dir.create(outdir, recursive=TRUE)
 	} else write.to.disk <- FALSE
+	
+	# Daphne: we're using countries so don't enter above if statement, but still need to make the directory
+	if(!file.exists(outdir)) dir.create(outdir, recursive=TRUE)
 	
 	if(is.mcmc.set.thinned) { 
 		thinned.mcmc <- mcmc.set
@@ -277,11 +287,26 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 
 	if (verbose) cat('Load hierarchical parameters.\n')
   
-    alpha.vars <- paste('alpha_',1:3, sep='')
+  alpha.vars <- paste('alpha_',1:3, sep='')
 	delta.vars <- paste('delta_',1:3, sep='')
 	other.vars <- c('chi', 'psi', 'Triangle4', 'delta4')
 	cs.par.values_hier <- newPointer(get.tfr.parameter.traces(load.mcmc.set$mcmc.list, 
 										c(alpha.vars, delta.vars, other.vars), burnin=0))
+	
+	##### Daphne
+	if (verbose) cat('Load beta parameters.\n')
+	beta.par.names <- c('beta_e', 'beta_fp', 'beta_g',
+	                    'beta_e_SSA', 'beta_fp_SSA', 'beta_g_SSA')
+	beta.par.values <- get.tfr.parameter.traces(load.mcmc.set$mcmc.list, beta.par.names, burnin=0)
+	SSA.indicator <- meta$SSA_indicator
+	
+	if(meta$second.stage.uncertainty){
+	  if (verbose) cat('Load objects from first stage of estimation.\n')
+	  sampled_iter <- get.tfr.parameter.traces(load.mcmc.set$mcmc.list, 'sampled_iter', burnin=0)
+	  m.default <- get.tfr.mcmc(sim.dir = meta$first.stage.directory)
+	  m.default.tfr.year <- seq(m.default$meta$start.year, m.default$meta$present.year)
+	}
+	##### end Daphne
 										
 	mid.years <- as.integer(c(if(suppl.T > 0) rownames(meta$suppl.data$tfr_matrix) else c(), rownames(tfr_matrix_reconstructed)))
 	thin3 <- NA
@@ -316,9 +341,8 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 		}
 		mc.meta3.pointer <- newPointer(mcmc3$meta)
 		mcmc3.list.pointer <- newPointer(mcmc3$mcmc.list)
-		
-		  
 	}
+	
 	max.nr.project <- nr_project
 	all.T_end.min <- ltfr_matrix.all
 	# load country-specific parameters
@@ -329,13 +353,14 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 	mcmc.list.pointer <- newPointer(mcmc.set$mcmc.list)
 	load.mcmc.list.pointer <- newPointer(load.mcmc.set$mcmc.list)
 	load.meta.pointer <- newPointer(load.mcmc.set$meta)
+
 	# country loop for preparing data for projections
 	for (country in prediction.countries){
 		country.obj <- get.country.object(country, meta, index=TRUE)
 		dprep <- .prepare.country.spec.pars.for.predictions(country, country.obj, meta.pointer, mcmc.list.pointer, 
 														load.meta.pointer, load.mcmc.list.pointer, nr_simu, burnin,
 														alpha.vars, delta.vars, has.phase3, mc.meta3.pointer, mcmc3.list.pointer, burnin3, thinning.index,
-														cs.par.values_hier, uncertainty)
+														cs.par.values_hier, uncertainty, meta$second.stage.uncertainty)
 
 		cs.var.names[[country]] <- list(U=dprep$U.var, Triangle_c4=dprep$Triangle_c4.var)
 		cs.par.values.list[[country]] <- dprep$cs.par.values[,c(dprep$Triangle_c4.var, dprep$U.var)]
@@ -350,11 +375,20 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 		max.nr.project <- max(max.nr.project, nr_project + nmissing[[country]])
 		
 		# load phase3 country-specific parameter traces
-		if(has.phase3 && is.element(country, meta3$id_phase3)) {
-		  
-			m3.par.values.cs.list[[country]] <- dprep$m3.par.values.cs
-			mu.c.mean[country] <- mean(m3.par.values.cs.list[[country]][,1])
-			rho.c.mean[country] <- mean(m3.par.values.cs.list[[country]][,2])
+		# Daphne: edited to account for country index differences if using second.stage.uncertainty
+		if(meta$second.stage.uncertainty){
+		  default_index <- get.country.object(country.obj$code, m.default$meta, index = FALSE)$index
+		  if(has.phase3 && is.element(default_index, meta3$id_phase3)) {
+		    m3.par.values.cs.list[[country]] <- dprep$m3.par.values.cs
+		    mu.c.mean[country] <- mean(m3.par.values.cs.list[[country]][,1])
+		    rho.c.mean[country] <- mean(m3.par.values.cs.list[[country]][,2])
+		  }
+		} else{
+		  if(has.phase3 && is.element(country, meta3$id_phase3)) {
+		    m3.par.values.cs.list[[country]] <- dprep$m3.par.values.cs
+		    mu.c.mean[country] <- mean(m3.par.values.cs.list[[country]][,1])
+		    rho.c.mean[country] <- mean(m3.par.values.cs.list[[country]][,2])
+		  }
 		}
 	} # end country prep loop
 	
@@ -366,7 +400,7 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 		epsilons <- rep(NA, nr_countries)
 		kappa<-eps.correlation$kappa
 	}
-	
+
 	# array for results - includes also historical data for periods with missing data
 	all.f_ps <- array(NA, dim=c(nr_countries_real, max.nr.project+1, nr_simu))
 	# vector W with the weight for the first two periods:
@@ -378,32 +412,141 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 	if (!is.null(mcmc.set$meta$ar.phase2) && (mcmc.set$meta$ar.phase2)) f_ps_previous <- matrix(NA, nrow = nr_simu, ncol=nr_countries_real)
 	for (icountry in 1:nr_countries_real) {
 		# fill the result array with observed data 
-	  if (uncertainty)
-	  {
-	    country.obj <- get.country.object(prediction.countries[icountry], meta, index=TRUE)
-	    tfr.table <- get.tfr.parameter.traces.cs(getValue(load.mcmc.list.pointer), country.obj, 
-	                                'tfr', burnin=0)
-	    shift <- get.tfr.shift.estimation(country.obj$code, getValue(meta.pointer))
-	    if (!is.null(shift)) tfr.table <- t(t(tfr.table) + shift)
-	    for(year in 1:fps.end.obs.index)
-	      all.f_ps[icountry,year,] <- tfr.table[,all.T_end.min+year-1]
-	    if (!is.null(mcmc.set$meta$ar.phase2) && (mcmc.set$meta$ar.phase2))
-	      f_ps_previous[, icountry] <- tfr.table[,all.T_end.min+year-2]
-	  }
-	  else
-	  {
-	    for(year in 1:fps.end.obs.index) 
+	  icountry_obj <- get.country.object(prediction.countries[icountry], meta, index=TRUE)
+	  
+	  for(year in 1:fps.end.obs.index) 
+	    # Daphne: add option to use sampled_iter from m.default
+	    if(meta$second.stage.uncertainty){
+	      yr <- names(all.tfr.list[[prediction.countries[icountry]]][all.T_end.min+year-1])
+	      icountry_obj_default  <- get.country.object(icountry_obj$code, m.default$meta, index = FALSE)
+	      all.f_ps[icountry,year,] <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = icountry_obj_default, par.names = c("tfr"), burnin = meta$first.stage.burnin)[sampled_iter, m.default.tfr.year == yr]
+	    } else{
 	      all.f_ps[icountry,year,] <- all.tfr.list[[prediction.countries[icountry]]][all.T_end.min+year-1]
+	    }
 	    if (!is.null(mcmc.set$meta$ar.phase2) && (mcmc.set$meta$ar.phase2))
-	      f_ps_previous[, icountry] <- all.tfr.list[[prediction.countries[icountry]]][all.T_end.min+year-2]
-	  }
+	      # Daphne: add option to use sampled_iter from m.default
+	      if(meta$second.stage.uncertainty){
+	        yr <- names(all.tfr.list[[prediction.countries[icountry]]][all.T_end.min+year-2])
+	        icountry_obj_default  <- get.country.object(icountry_obj$code, m.default$meta, index = FALSE)
+	        f_ps_previous[, icountry] <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = icountry_obj_default, par.names = c("tfr"), burnin = meta$first.stage.burnin)[sampled_iter, m.default.tfr.year == yr]
+	      } else{
+	        f_ps_previous[, icountry] <- all.tfr.list[[prediction.countries[icountry]]][all.T_end.min+year-2]
+	      }
+	  
 		first.two.na <- which(is.na(all.f_ps[icountry,,1]))[1:2]
 		which.Wsecond[icountry] <- first.two.na[2]
 		W[icountry,first.two.na] <- c(adj.factor1, adj.factor2)
 		first.projection[icountry] <- first.two.na[1]
 	}
-	
 	W[is.na(W)] <- 0
+	
+	#### Daphne
+	# load in covariate projections from inputted file path 
+	# system.file("extdata", package = "bayesTFR")
+	# sample with replacement from covariate trajectories to match nr_simu
+	codes <- meta$regions$country_code
+	if(meta$annual.simulation){ 
+	  gdp_file_name  <- "/gdp_annual.rda"  # gdp_proj_outputs/delta_gdp_centered_distr_20231228.rda
+	  
+	  if(scenario == "reference"){
+	    educ_file_name <- "/educ_annual.rda" # wicedproj_outputs/delta_lowsec_annual_centered_distr_20240109.rda
+	    fp_file_name <- "/fp_annual.rda"
+	  } else if(scenario == "SDG"){
+	    educ_file_name <- "/educ_annual_SDG.rda"
+	    fp_file_name <- "/fp_annual_SDG.rda"
+	  }
+	} else{
+	  gdp_file_name  <- "/gdp_5pd.rda" 	  # gdp_proj_outputs/delta_gdp_5pd_centered_distr_20231228.rda
+	  
+	  if(scenario == "reference"){
+	    educ_file_name <- "/educ_5pd.rda" # wicedproj_outputs/delta_lowsec_5pd_centered_distr_20240102.rda
+	    fp_file_name <- "/fp_5pd.rda"
+	  } else if(scenario == "SDG"){
+	    educ_file_name <- "/educ_5pd_SDG.rda"
+	    fp_file_name <- "/fp_5pd_SDG.rda"
+	  }
+	}
+	
+	# set up covariate arrays that correspond to f_ps_previous
+	educ_previous <- array(NA, dim=c(nr_simu, nr_countries_real)) 
+	fp_previous <- array(0, dim=c(nr_simu, nr_countries_real)) 
+	gdp_previous <- array(NA, dim=c(nr_simu, nr_countries_real)) 
+	
+	
+browser()
+	### education: list called attain_w 
+	load(paste0(mcmc.set$mcmc.list[[1]]$covariate.filepath, educ_file_name))
+	
+	educ <- array(NA, dim=c(nr_countries_real, nr_project+1, nr_simu))
+	random_iter_educ <- sample(length(attain_w), nr_simu, replace = TRUE)
+
+	for(isim in 1:nr_simu){
+	  educ_proj <- attain_w[[random_iter_educ[isim]]]
+	  #colnames(educ_proj) <- c("country", "code", seq(2016, 2100))
+	  
+	  for(icountry in 1:nr_countries_real){
+	    cd <- codes[prediction.countries[icountry]]
+	    
+	    if(cd %in% educ_proj$code){
+	      for(iyear in 1:(nr_project + 1)){ 
+	        # iyear = 1 corresponds to present.year-year.step
+	        # iyear = 2 corresponds to present.year
+	        # iyear = 3 corresponds to present.year + year.step
+	        # iyear = nr_project + 1 corresponds to end.year - year.step
+	        yr <- present.year + (iyear-2)*year.step
+	        educ[icountry,iyear,isim] <- educ_proj[which(educ_proj$code == cd), which(colnames(educ_proj) == yr)]
+	      }
+	      
+	      # set up array that corresponds to f_ps_previous 
+	      # iyear = "0"
+	      educ_previous[isim, icountry] <- educ_proj[which(educ_proj$code == cd), which(colnames(educ_proj) == (present.year - 2*year.step))]
+	      
+	    } # else, we have NA
+	  }
+	}
+	print("Finished loading education projections")
+	
+	### family planning: list called fp_w
+	#load(paste0(mcmc.set$mcmc.list[[1]]$covariate.filepath, fp_file_name))
+	
+	fp <- array(0, dim=c(nr_countries_real, nr_project+1, nr_simu))
+	#fp <- array(NA, dim=c(nr_countries_real, max.nr.project+1, nr_simu))
+	#random_iter_fp <- sample(length(fp_w), nr_simu, replace = TRUE)
+	
+	print("Finished loading family planning projections")
+	
+	### GDP: list called gdp_w
+	load(paste0(mcmc.set$mcmc.list[[1]]$covariate.filepath, gdp_file_name))
+	
+	gdp <- array(NA, dim=c(nr_countries_real, nr_project+1, nr_simu))
+	random_iter_gdp <- sample(length(gdp_w), nr_simu, replace = TRUE)
+	
+	for(isim in 1:nr_simu){
+	  gdp_proj <- gdp_w[[random_iter_gdp[isim]]]
+	  #colnames(gdp_proj) <- c("country", "code", seq(2019, 2100))
+
+	  for(icountry in 1:nr_countries_real){
+	    cd <- codes[prediction.countries[icountry]]
+
+	    if(cd %in% gdp_proj$code){
+	      for(iyear in 1:(nr_project + 1)){ 
+	        # iyear = 1 corresponds to present.year-year.step
+	        # iyear = 2 corresponds to present.year
+	        # iyear = 3 corresponds to present.year + year.step
+	        # iyear = nr_project + 1 corresponds to end.year - year.step
+	        yr <- present.year + (iyear-2)*year.step
+	        gdp[icountry,iyear,isim] <- gdp_proj[which(gdp_proj$code == cd), which(colnames(gdp_proj) == yr)]
+	      }
+	      
+	      # set up array that corresponds to f_ps_previous 
+	      # iyear = "0"
+	      gdp_previous[isim, icountry] <- gdp_proj[which(gdp_proj$code == cd), which(colnames(gdp_proj) == (present.year - 2*year.step))]
+	    } # else, we have NA
+	  }
+	}
+	print("Finished loading GDP projections")
+	##### end Daphne
+
 	mu.c <- rho.c <- rep(NA, nr_countries)
 	sigma.epsAR1 <- list()
 	if(length(sigmas_all) < max.nr.project) {
@@ -414,6 +557,7 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 		rho.c <- rep(rho, nr_countries)
 		sigma.epsAR1 <- rep(list(sigmas_all), nr_countries)
 	}
+	
 	traj.counter <- 0
 	country.loop.max <- 20
 	status.for.gui <- paste('out of', nr_simu, 'trajectories.')
@@ -422,7 +566,7 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 		verbose.iter <- as.integer(max(1, nr_simu/100))
 		if(interactive()) cat('\n')
 	}
-	
+
 	#########################################
 	for (s in 1:nr_simu){ # Iterate over trajectories
 	#########################################
@@ -445,10 +589,24 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 			mu.c[] <- m3.par.values[s,'mu']
 			rho.c[] <- m3.par.values[s,'rho']
 			sigma.epsAR1 <- rep(list(rep(m3.par.values[s,'sigma.eps'], max.nr.project)), nr_countries)
-			for (country in prediction.countries[prediction.countries %in% meta3$id_phase3]){	
-					mu.c[country] <- m3.par.values.cs.list[[country]][s,1]
-					rho.c[country] <- m3.par.values.cs.list[[country]][s,2]
+			
+			# Daphne: edited to account for country index differences if using second.stage.uncertainty
+			if(meta$second.stage.uncertainty){
+			  for (country in prediction.countries){	
+			    country.obj <- get.country.object(country, meta, index = TRUE)
+			    default_index <- get.country.object(country.obj$code, m.default$meta, index = FALSE)$index
+			    if(default_index %in% meta3$id_phase3){
+			      mu.c[country] <- m3.par.values.cs.list[[country]][s,1]
+			      rho.c[country] <- m3.par.values.cs.list[[country]][s,2]
+			    }
+			  }
+			} else{
+			  for (country in prediction.countries[prediction.countries %in% meta3$id_phase3]){	
+			    mu.c[country] <- m3.par.values.cs.list[[country]][s,1]
+			    rho.c[country] <- m3.par.values.cs.list[[country]][s,2]
+			  }
 			}
+			
 		}
 		is.in.phase3 <- rep(forceAR1, nr_countries_real)
 		S11 <- rep(0, nr_countries_real)
@@ -485,7 +643,17 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 					if(!is.na(all.f_ps[icountry, year,s])) next
 					country <- prediction.countries[icountry]	# index within meta (icountry is index within countries for which this is run)
 					this.T_end <- meta$T_end_c[country]
-					all.tfr <- all.tfr.list[[country]]
+					
+					# Daphne: add option to use TFR trace from m.default as all.tfr
+					if(meta$second.stage.uncertainty){
+					  icountry_obj <- get.country.object(prediction.countries[icountry], meta, index=TRUE)
+					  icountry_obj_default  <- get.country.object(icountry_obj$code, m.default$meta, index = FALSE)
+					  all.tfr <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = icountry_obj_default, par.names = c("tfr"), burnin = meta$first.stage.burnin)[sampled_iter[s], m.default.tfr.year %in% names(all.tfr.list[[country]])]
+					  names(all.tfr) <- names(all.tfr.list[[country]])
+					} else{
+					  all.tfr <- all.tfr.list[[country]]
+					}
+					
 		 			if(!is.in.phase3[icountry]) {
 		 				# check if now in phase 3
 						if(year == first.projection[icountry]) { # first projection period
@@ -521,9 +689,34 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 		  			}
 		  			# Simulate projection
 					if (!is.in.phase3[icountry]){ # Phase II
-						new.tfr <- (all.f_ps[icountry,year-1,s]- DLcurve(theta_si.list[[country]][s,], all.f_ps[icountry,year-1,s], 
-						                                                 meta$dl.p1, meta$dl.p2, meta$annual.simulation) - 
-						                W[icountry,year]*S11[icountry])
+						#### Daphne
+						# add covariate term to new.tfr
+						beta_e <- beta.par.values[s,1] 
+						beta_fp <- beta.par.values[s,2]
+						beta_g <- beta.par.values[s,3]
+						beta_e_SSA <- beta.par.values[s,4] 
+						beta_fp_SSA <- beta.par.values[s,5]
+						beta_g_SSA <- beta.par.values[s,6]
+						
+						# covariates only cover years in nr_project
+						yr <- NULL
+						if(year >= first.projection[icountry]){
+						  # year = 50 is 2020, want to use covariates from 2019
+						  # covariates are indexed with iyear=1 -> 2018
+						  # so want year = 50 to give us yr = 2 for 2019
+						  yr <- year - first.projection[icountry] + 2
+						}
+
+						educ_contr <- ifelse(is.null(yr), 0, beta_e*educ[icountry,yr,s])
+						fp_contr <- ifelse(is.null(yr), 0, beta_fp*fp[icountry,yr,s])
+						gdp_contr <- ifelse(is.null(yr), 0, beta_g*gdp[icountry,yr,s])
+						educ_inter <- ifelse(is.null(yr), 0, beta_e_SSA*educ[icountry,yr,s]*SSA.indicator[icountry])
+						fp_inter <- ifelse(is.null(yr), 0, beta_fp_SSA*fp[icountry,yr,s]*SSA.indicator[icountry])
+						gdp_inter <- ifelse(is.null(yr), 0, beta_g_SSA*gdp[icountry,yr,s]*SSA.indicator[icountry])
+						
+						new.tfr <- (all.f_ps[icountry,year-1,s]- DLcurve(theta_si.list[[country]][s,], all.f_ps[icountry,year-1,s], meta$dl.p1, meta$dl.p2, meta$annual.simulation) - W[icountry,year]*S11[icountry] + educ_contr + fp_contr + gdp_contr + educ_inter + fp_inter + gdp_inter)
+						#### end Daphne
+					
 						# get errors
 						if(boost.first.period.in.phase2 && is.element(country, meta$id_Tistau) && (year == first.projection[icountry])) {
 							eps.mean <- tau.par.values[s, 'mean_eps_tau']
@@ -533,11 +726,32 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 							eps.mean <- 0
 							if (!is.null(mcmc.set$meta$ar.phase2) && (mcmc.set$meta$ar.phase2))
 							{
-							  if(year == first.projection[icountry]) 
+							  # Daphne: added covariates
+							  if(year == first.projection[icountry]){
 							    tfr_prev <- f_ps_previous[s, icountry]
-							  else
+							    cov_contr <- beta_e*educ_previous[s, icountry] + beta_fp*fp_previous[s, icountry] + beta_g*gdp_previous[s, icountry] + beta_e_SSA*educ_previous[s, icountry]*SSA.indicator[icountry] + beta_fp_SSA*fp_previous[s, icountry]*SSA.indicator[icountry] + beta_g_SSA*gdp_previous[s, icountry]*SSA.indicator[icountry]
+							  } else{
 							    tfr_prev <- all.f_ps[icountry, year-2, s]
-							  tfr_mean <- tfr_prev - DLcurve(theta_si.list[[country]][s,], tfr_prev, meta$dl.p1, meta$dl.p2, meta$annual.simulation)
+							    
+							    # covariates only cover years in nr_project
+							    yr <- NULL
+							    if(year >= first.projection[icountry]){
+							      # year = 50 is 2020, want to use covariates from 2019
+							      # covariates are indexed with iyear=1 -> 2018
+							      # so want year = 50 to give us yr = 2 for 2019
+							      yr <- year - first.projection[icountry] + 2
+							    }
+							    educ_contr <- ifelse(is.null(yr), 0, beta_e*educ[icountry,yr-2,s])
+							    fp_contr <- ifelse(is.null(yr), 0, beta_fp*fp[icountry,yr-2,s])
+							    gdp_contr <- ifelse(is.null(yr), 0, beta_g*gdp[icountry,yr-2,s])
+							    educ_inter <- ifelse(is.null(yr), 0, beta_e_SSA*educ[icountry,yr-2,s]*SSA.indicator[icountry])
+							    fp_inter <- ifelse(is.null(yr), 0, beta_fp_SSA*fp[icountry,yr-2,s]*SSA.indicator[icountry])
+							    gdp_inter <- ifelse(is.null(yr), 0, beta_g_SSA*gdp[icountry,yr-2,s]*SSA.indicator[icountry])
+							    
+							    cov_contr <- educ_contr + fp_contr + gdp_contr + educ_inter + fp_inter + gdp_inter
+							  }
+							  # Daphne: updated tfr_mean to include covariate term
+							  tfr_mean <- tfr_prev - DLcurve(theta_si.list[[country]][s,], tfr_prev, meta$dl.p1, meta$dl.p2, meta$annual.simulation) + cov_contr
 							  eps_prev <- all.f_ps[icountry, year-1, s] - tfr_mean
 							  eps.mean <- eps_prev * rho.phase2.values[s]
 							}
@@ -599,6 +813,7 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 		# extract the future trajectories (including the present period)
 		f_ps_future <- all.f_ps[icountry,(dim(all.f_ps)[2]-nr_project):dim(all.f_ps)[2],]
 		if (nmissing[[country]] > 0) { # data imputation
+		  #
 			f_ps_future[1,] <- quantile(f_ps_future[1,], 0.5, na.rm = TRUE) # set all trajectories in the first time period to the median
 			tfr_matrix_reconstructed[(ltfr_matrix-fps.end.obs.index+2):ltfr_matrix,country] <- apply(
 											all.f_ps[icountry,2:fps.end.obs.index,,drop=FALSE],
@@ -657,9 +872,11 @@ getValue <- function(pointer)
 	return(pointer$value)
 
 
+# Daphne: added argument second.stage.uncertainty
+#         added steps to get Phase III parameters when using second.stage.uncertainty
 .prepare.country.spec.pars.for.predictions <- function(country, country.obj, meta, mcmc.list, load.meta, load.mcmc.list, nr_simu, burnin,
 														alpha.vars, delta.vars, has.phase3, meta3, mcmc3.list, burnin3, thinning.index,
-														cs.par.values_hier, uncertainty = FALSE) {
+														cs.par.values_hier, uncertainty = FALSE, second.stage.uncertainty = FALSE) {
   if (is.element(country,getValue(meta)$id_DL)){
 		U.var <- paste0('U_c', country.obj$code)
 		d.var <- paste0('d_c', country.obj$code)
@@ -733,20 +950,35 @@ getValue <- function(pointer)
 	                          Triangle_c4_s, d_s) 
 	}
 	m3.par.values.cs <- NULL
-
-	if(has.phase3 && !is.null(getValue(meta3)) && is.element(country, getValue(meta3)$id_phase3))
-	{
-	  if (country.obj$index %in% getValue(meta)$extra)
-	  {
-	    nr.points <- length(thinning.index)
-	    nr.points.cs <- get.stored.mcmc.length.extra(getValue(meta), country.obj$index, 
-	                                 nr.chains = length(getValue(mcmc3.list)), burnin = burnin3)
-	    if (nr.points.cs >= nr.points) thinning.index <- get.thinning.index(nr.points, nr.points.cs)$index
-	    else thinning.index <- sample(1:nr.points.cs, nr.points, replace=TRUE)
-	  }
-      m3.par.values.cs <- get.tfr3.parameter.traces.cs(getValue(mcmc3.list), country.obj=country.obj,
+	
+	# Daphne: if second.stage.uncertainty, the indices stored in id_phase3 correspond to m.default
+	# and are different from country.obj$index 
+	if(second.stage.uncertainty){
+	  m.default <- get.tfr.mcmc(sim.dir = getValue(meta)$first.stage.directory)
+	  # get the m.default country.obj corresponding to this country code
+	  country.obj.default <- get.country.object(country.obj$code, m.default$meta, index = FALSE)
+	  
+	  if(has.phase3 && !is.null(getValue(meta3)) && is.element(country.obj.default$index, m.default$meta$id_phase3)){
+	    m3.par.values.cs <- get.tfr3.parameter.traces.cs(getValue(mcmc3.list), country.obj=country.obj,
 	                                                     par.names=c('mu.c', 'rho.c'), burnin=burnin3, thinning.index=thinning.index)
+	  }
+
+	} else{
+	  if(has.phase3 && !is.null(getValue(meta3)) && is.element(country, getValue(meta3)$id_phase3))
+	  {
+	    if (country.obj$index %in% getValue(meta)$extra)
+	    {
+	      nr.points <- length(thinning.index)
+	      nr.points.cs <- get.stored.mcmc.length.extra(getValue(meta), country.obj$index, 
+	                                                   nr.chains = length(getValue(mcmc3.list)), burnin = burnin3)
+	      if (nr.points.cs >= nr.points) thinning.index <- get.thinning.index(nr.points, nr.points.cs)$index
+	      else thinning.index <- sample(1:nr.points.cs, nr.points, replace=TRUE)
+	    }
+	    m3.par.values.cs <- get.tfr3.parameter.traces.cs(getValue(mcmc3.list), country.obj=country.obj,
+	                                                     par.names=c('mu.c', 'rho.c'), burnin=burnin3, thinning.index=thinning.index)
+	  }
 	}
+
 			
 	return(list(U.var=U.var, Triangle_c4.var=Triangle_c4.var, theta_si=theta_si, cs.par.values=cs.par.values,
 			m3.par.values.cs=m3.par.values.cs))
