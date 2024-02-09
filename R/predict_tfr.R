@@ -303,7 +303,7 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 	if(meta$second.stage.uncertainty){
 	  if (verbose) cat('Load objects from first stage of estimation.\n')
 	  sampled_iter <- get.tfr.parameter.traces(load.mcmc.set$mcmc.list, 'sampled_iter', burnin=0)
-	  m.default <- get.tfr.mcmc(sim.dir = meta$first.stage.directory)
+	  m.default <- get.tfr.mcmc(sim.dir = meta$first.stage.directory, chain.ids = meta$first.stage.chains)
 	  m.default.tfr.year <- seq(m.default$meta$start.year, m.default$meta$present.year)
 	}
 	##### end Daphne
@@ -954,7 +954,8 @@ getValue <- function(pointer)
 	# Daphne: if second.stage.uncertainty, the indices stored in id_phase3 correspond to m.default
 	# and are different from country.obj$index 
 	if(second.stage.uncertainty){
-	  m.default <- get.tfr.mcmc(sim.dir = getValue(meta)$first.stage.directory)
+	  m.default <- get.tfr.mcmc(sim.dir = getValue(meta)$first.stage.directory, 
+	                            chain.ids = getValue(meta)$first.stage.chains)
 	  # get the m.default country.obj corresponding to this country code
 	  country.obj.default <- get.country.object(country.obj$code, m.default$meta, index = FALSE)
 	  

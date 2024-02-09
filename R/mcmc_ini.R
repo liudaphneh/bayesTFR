@@ -422,7 +422,7 @@ decr.meta.ini <- function(meta){
 
 # DAPHNE: 
 #    - added calls to covariate.meta.ini and decr.meta.ini
-#    - added arguments first.stage.directory, first.stage.burnin, second.stage.uncertainty, covariate.filepath
+#    - added arguments first.stage.directory, first.stage.burnin, first.stage.chains, first.stage.3.chains, second.stage.uncertainty, covariate.filepath
 mcmc.meta.ini <- function(...,
 						U.c.low,
 						start.year=1950, present.year=2020, 
@@ -432,6 +432,8 @@ mcmc.meta.ini <- function(...,
 						# Daphne
 						first.stage.directory=NULL, 
 						first.stage.burnin=NULL,
+						first.stage.chains = NULL,
+						first.stage.3.chains = NULL,
 						second.stage.uncertainty=FALSE, 
 						covariate.filepath=system.file("extdata", package = "bayesTFR"), 
 						# end Daphne
@@ -463,6 +465,8 @@ mcmc.meta.ini <- function(...,
 						# Daphne
 						first.stage.directory = first.stage.directory, 
 						first.stage.burnin = first.stage.burnin,
+						first.stage.chains = first.stage.chains,
+						first.stage.3.chains = first.stage.3.chains,
 						second.stage.uncertainty = second.stage.uncertainty, 
 						covariate.filepath=covariate.filepath,
 						# end Daphne
@@ -476,6 +480,8 @@ mcmc.meta.ini <- function(...,
 	meta <- decr.meta.ini(meta)
 	meta$first.stage.directory <- first.stage.directory
 	meta$first.stage.burnin <- first.stage.burnin
+	meta$first.stage.chains <- first.stage.chains
+	meta$first.stage.3.chains <- first.stage.3.chains
 	meta$second.stage.uncertainty <- second.stage.uncertainty
 	
 	return(structure(c(mcmc.input, meta), class='bayesTFR.mcmc.meta'))
@@ -487,6 +493,8 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 						# Daphne
 						first.stage.directory=NULL, 
 						first.stage.burnin=NULL,
+						first.stage.chains = NULL,
+						first.stage.3.chains = NULL,
 						second.stage.uncertainty=FALSE, 
 						covariate.filepath=system.file("extdata", package = "bayesTFR"),
 						# end Daphne
@@ -672,7 +680,7 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 	# Daphne: Phase III steps if using second.stage.uncertainty
 	if(second.stage.uncertainty)
 	{
-	  m.default <- get.tfr.mcmc(sim.dir = first.stage.directory)
+	  m.default <- get.tfr.mcmc(sim.dir = first.stage.directory, chain.ids = first.stage.chains)
 	  
 	  output$raw_data.original <- m.default$meta$raw_data.original
 	  output$indices.outliers <- m.default$meta$indices.outliers
@@ -725,6 +733,8 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 					 bc_rho.ini = 0,
 					 first.stage.directory=NULL,
 					 first.stage.burnin=NULL,
+					 first.stage.chains=NULL,
+					 first.stage.3.chains=NULL,
 					 second.stage.uncertainty=FALSE,
 					 sampled_iter.ini=0,
 					 covariate.filepath=system.file("extdata", package = "bayesTFR"),
@@ -829,6 +839,8 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 						            bc_rho = bc_rho, bc_rho.ini = bc_rho.ini,
 						            first.stage.directory = first.stage.directory,
 						            first.stage.burnin = first.stage.burnin,
+						            first.stage.chains = first.stage.chains,
+						            first.stage.3.chains = first.stage.3.chains,
 				            		second.stage.uncertainty = second.stage.uncertainty,
 						            sampled_iter=sampled_iter,
 						            sampled_iter.ini=sampled_iter.ini,

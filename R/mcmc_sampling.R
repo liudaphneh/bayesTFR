@@ -48,12 +48,9 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
     suppl.T <- if(!is.null(mcmc$meta$suppl.data$regions)) mcmc$meta$suppl.data$T_end else 0
     
     # Daphne: load in MCMC object from first stage of estimation
-    m.default <- get.tfr.mcmc(mcmc$meta$first.stage.directory)
+    m.default <- get.tfr.mcmc(mcmc$meta$first.stage.directory, chain.ids = mcmc$meta$first.stage.chains)
     if (mcmc$meta$second.stage.uncertainty){
-      m.default.3 <- get.tfr3.mcmc(mcmc$meta$first.stage.directory)
-    }
-    if (mcmc$meta$second.stage.uncertainty){
-      m.default.3 <- get.tfr3.mcmc(mcmc$meta$first.stage.directory)
+      m.default.3 <- get.tfr3.mcmc(mcmc$meta$first.stage.directory, chain.ids = mcmc$meta$first.stage.3.chains)
     }
     
     if (uncertainty)

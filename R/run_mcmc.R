@@ -1,6 +1,8 @@
 # Daphne:
 #    - first.stage.directory = directory where the first stage of estimation (i.e. m.default) is stored
 #    - first.stage.burnin = amount of burnin to use for run stored in first.stage.directory
+#    - first.stage.chains = chain IDs to use for Phase II of first stage of estimation
+#    - first.stage.3.chains = chain IDs to use for Phase III of first stage of estimation
 #    - second.stage.uncertainty = Boolean indicating if the second stage should be estimated using uncertainty about past values of TFR
 #          -> if FALSE, uses values of TFR from my.tfr.file
 #          -> if TRUE, uses estimated past TFR from first.stage.directory
@@ -43,6 +45,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						beta_g_SSA.ini=NULL,
 						first.stage.directory = NULL,
 						first.stage.burnin = NULL,
+						first.stage.chains = NULL,
+						first.stage.3.chains = NULL,
 						second.stage.uncertainty = FALSE,
 						sampled_iter.ini = NULL,
 						covariate.filepath = system.file("extdata", package = "bayesTFR"), 
@@ -75,7 +79,7 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	# DAPHNE
 	# if second.stage.uncertainty = TRUE, check that first stage actually used uncertainty = TRUE
 	if(second.stage.uncertainty){
-	  m.default <- get.tfr.mcmc(sim.dir = first.stage.directory)
+	  m.default <- get.tfr.mcmc(sim.dir = first.stage.directory, chain.ids = first.stage.chains)
 	  if(!m.default$mcmc.list$`1`$uncertainty){
 	    second.stage.uncertainty = FALSE
 	    warning('First stage used uncertainty = FALSE, so second.stage.uncertainty was set to FALSE.')
@@ -160,6 +164,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						beta_g_SSA.ini=beta_g_SSA.ini,
 						first.stage.directory = first.stage.directory,
 						first.stage.burnin = first.stage.burnin,
+						first.stage.chains = first.stage.chains,
+						first.stage.3.chains = first.stage.3.chains,
 						second.stage.uncertainty = second.stage.uncertainty,
 						sampled_iter.ini = sampled_iter.ini,
 						covariate.filepath = covariate.filepath,
@@ -345,6 +351,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 						bc_rho.ini=bc_rho.ini,
 						first.stage.directory=first.stage.directory,
 						first.stage.burnin=first.stage.burnin,
+						first.stage.chains = first.stage.chains,
+						first.stage.3.chains = first.stage.3.chains,
 						second.stage.uncertainty=second.stage.uncertainty,
 						sampled_iter.ini=sampled_iter.ini,
 						covariate.filepath=covariate.filepath,
@@ -365,6 +373,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 					 	bc_rho.ini=bc_rho.ini,
 					 	first.stage.directory=first.stage.directory,
 					 	first.stage.burnin=first.stage.burnin,
+					 	first.stage.chains = first.stage.chains,
+					 	first.stage.3.chains = first.stage.3.chains,
 					 	second.stage.uncertainty=second.stage.uncertainty,
 					 	sampled_iter.ini=sampled_iter.ini,
 					 	covariate.filepath=covariate.filepath,
@@ -407,6 +417,8 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
 							bc_rho.ini,
 							first.stage.directory,
 							first.stage.burnin,
+							first.stage.chains,
+							first.stage.3.chains,
 							second.stage.uncertainty,
 							sampled_iter.ini,
 							covariate.filepath,
@@ -453,6 +465,8 @@ mcmc.run.chain <- function(chain.id, meta, thin=1, iter=100, starting.values=NUL
                    bc_rho.ini=bc_rho.ini[chain.id],
                    first.stage.directory=first.stage.directory,
                    first.stage.burnin=first.stage.burnin,
+                   first.stage.chains = first.stage.chains,
+                   first.stage.3.chains = first.stage.3.chains,
                    second.stage.uncertainty=second.stage.uncertainty,
                    sampled_iter.ini=sampled_iter.ini[chain.id],
                    covariate.filepath=covariate.filepath,
