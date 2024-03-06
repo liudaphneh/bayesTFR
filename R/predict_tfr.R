@@ -446,25 +446,13 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
 	# sample with replacement from covariate trajectories to match nr_simu
 	codes <- meta$regions$country_code
 	if(meta$annual.simulation){ 
-	  gdp_file_name  <- "/gdp_annual.rda"  # gdp_proj_outputs/delta_gdp_centered_distr_20231228.rda
-	  
-	  if(scenario == "reference"){
-	    educ_file_name <- "/educ_annual.rda" # wicedproj_outputs/delta_lowsec_annual_centered_distr_20240109.rda
-	    fp_file_name <- "/fp_annual.rda"
-	  } else if(scenario == "SDG"){
-	    educ_file_name <- "/educ_annual_SDG.rda"
-	    fp_file_name <- "/fp_annual_SDG.rda"
-	  }
+	  gdp_file_name  <- "/gdp_annual.rda"
+	  educ_file_name <- paste0("/educ_annual_", scenario, ".rda") 
+	  fp_file_name <- paste0("/fp_annual_", scenario, ".rda") 
 	} else{
-	  gdp_file_name  <- "/gdp_5pd.rda" 	  # gdp_proj_outputs/delta_gdp_5pd_centered_distr_20231228.rda
-	  
-	  if(scenario == "reference"){
-	    educ_file_name <- "/educ_5pd.rda" # wicedproj_outputs/delta_lowsec_5pd_centered_distr_20240102.rda
-	    fp_file_name <- "/fp_5pd.rda"
-	  } else if(scenario == "SDG"){
-	    educ_file_name <- "/educ_5pd_SDG.rda"
-	    fp_file_name <- "/fp_5pd_SDG.rda"
-	  }
+	  gdp_file_name  <- "/gdp_5pd.rda" 
+	  educ_file_name <- paste0("/educ_5pd_", scenario, ".rda") 
+	  fp_file_name <- paste0("/fp_5pd_", scenario, ".rda") 
 	}
 	
 	# set up covariate arrays that correspond to f_ps_previous
