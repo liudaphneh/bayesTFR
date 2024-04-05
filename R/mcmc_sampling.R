@@ -320,7 +320,8 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 	if(mcenv$second.stage.uncertainty){ tfr.samples <- list() }
 
 	for (country in id_DL_all){
-	  country.i.obj <- get.country.object(country, meta = m.default$meta, index = TRUE)
+	  cd <- get.country.object(country, meta = mcenv$meta, index = TRUE)$code
+	  country.i.obj <- get.country.object(cd, meta = m.default$meta, index = FALSE)
 	  country.traces <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = country.i.obj, par.names = c("d", "gamma", "Triangle_c4"), burnin = mcenv$meta$first.stage.burnin)
 	  d.samples[[country]] <- country.traces[iter.sample, 1]
 	  gamma.samples[[country]] <- country.traces[iter.sample, c(2,3,4)]
@@ -464,24 +465,20 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 
           mcenv$eps_Tc[idx, country] <- eps_T_prop
           mcenv$Triangle_c4[country] <- Triangle_c4_prop
-        }
         
-         # U_c updated only for countries with early decline
-         for (country in id_early_all){
-           start_idx <- max(mcenv$meta$start_c[country], 
-                            mcenv$meta$start_cov_data_c[country])
-           theta_prop <-  c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
-           U_prop <- U.samples[[country]][iter.idx]
-           theta_prop[1:3] <- theta_prop[1:3]/(mcenv$U_c[country] - mcenv$Triangle_c4[country])*(U_prop - mcenv$Triangle_c4[country])
-           if(mcenv$second.stage.uncertainty){
-             eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
-           } else{
-             eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = NULL, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
-           }
+		      ##### U
+          theta_prop <- c((mcenv$U_c[country]-mcenv$Triangle_c4[country])*exp(mcenv$gamma_ci[country,])/sum(exp(mcenv$gamma_ci[country,])), mcenv$Triangle_c4[country], mcenv$d_c[country])
+          U_prop <- U.samples[[country]][iter.idx]
+          theta_prop[1:3] <- theta_prop[1:3]/(mcenv$U_c[country] - mcenv$Triangle_c4[country])*(U_prop - mcenv$Triangle_c4[country])
+          if(mcenv$second.stage.uncertainty){
+            eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = tfr.samples[[country]][iter.idx, ], country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+            } else{
+              eps_T_prop <- get.eps.T(theta_prop, beta_prop, tfr_trace = NULL, country, mcenv$meta, rho.phase2=mcenv$rho.phase2)
+              }
            
-           mcenv$eps_Tc[start_idx:(mcenv$meta$lambda_c[country]-1), country] <- eps_T_prop
-           mcenv$U_c[country] <- U_prop
-         } 
+          mcenv$eps_Tc[start_idx:(mcenv$meta$lambda_c[country]-1), country] <- eps_T_prop
+          mcenv$U_c[country] <- U_prop
+        } 
 
          ##################################################################
          #mcenv# alpha_i's and delta_i's, with gibbs step

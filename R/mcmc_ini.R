@@ -289,16 +289,18 @@ find.raw.data.outliers <- function(raw.tfr, iso.unbiased, max.drop=1, max.increa
 covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.file("extdata", package = "bayesTFR")){
   # import covariate data
   if(annual){
-    #educ <- read.table(here("../Data", "bayestfr_educ_annual_20240107.txt"))
-    #fp <- read.table(here("../Data", "fp_oneyear_for_testing.txt"))
-    #gdp <- read.table(here("../Data", "bayestfr_gdp_annual_20231112.txt"))
+    # educ = ../Data/bayesTFR_educ_annual_20240107.txt
     educ <- read.table(paste0(covariate.filepath, "/bayestfr_educ_annual.txt"))
+    # fp = ../Data/bayestfr_fp_annual_20240310.txt
     fp <- read.table(paste0(covariate.filepath, "/bayestfr_fp_annual.txt"))
+    # gdp = ../Data/bayestfr_gdp_annual_20231112.txt
     gdp <- read.table(paste0(covariate.filepath, "/bayestfr_gdp_annual.txt"))
   } else{
-    educ <- read.table(here("../../Conditional/Data", "educ_2_hier_X_minus_Xstar_20230114.txt"))
-    fp <- read.table(here("../../Conditional/Data", "CP_X_minus_Xstar_20210210.txt"))
-    #gdp <- read.table(here("../Data", "bayestfr_gdp_five_year_20231112.txt"))
+    # educ = ../Data/bayesTFR_educ_5pd_20240107.txt
+    educ <- read.table(paste0(covariate.filepath, "/bayestfr_educ_5pd.txt"))
+    # fp = ../Data/bayestfr_fp_5pd_20240310.txt
+    fp <- read.table(paste0(covariate.filepath, "/bayestfr_fp_5pd.txt"))
+    # gdp = ../Data/bayestfr_gdp_five_year_20231112.txt
     gdp <- read.table(paste0(covariate.filepath, "/bayestfr_gdp_5pd.txt"))
   }
   
@@ -355,27 +357,48 @@ covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.
   gdp.w <- bind_cols(gdp.w, no.gdp.data)
   gdp.w <- select(gdp.w, colnames(meta$tfr_matrix))
   rownames(gdp.w) <- rownames(educ.w)
+  
+  # add to meta
+  meta$educ <- educ.w
+  meta$fp <- fp.w
+  meta$gdp <- gdp.w
 
   ##### complete case indicator #####
   # create a matrix that indicates which country-time pairs have 
   # education, FP, and GDP data (complete cases of DeltaX)
-  cc.matrix <- !is.na(educ.w) & !is.na(fp.w) & !is.na(gdp.w)
-  meta$cc_matrix <- cc.matrix
-  #write.table(cc.matrix, file=here("../Data", "cc_matrix_testing.txt"))
+  cc_matrix <- !is.na(educ.w) & !is.na(fp.w) & !is.na(gdp.w)
+  meta$cc_matrix <- cc_matrix
   
-  ##### add covariate data and cluster membership to meta #####
-  meta$educ <- educ.w
-  meta$fp <- fp.w
-  meta$gdp <- gdp.w
-  
-  # cluster membership information: a vector with cluster membership ID in the same country-time ordering as as.vector(t(mcenv$educ))
-  if(annual){
-    clusterUNregion <- read.table(here("../Data", "clusters_oneyear_testing.txt"))
-  } else{
-    clusterUNregion <- read.table(here("../../Conditional/Data", "bayestfr_clusters_20201123.txt"))
+  ##### UN region cluster membership  #####
+  # vector with cluster membership ID in the same country-time ordering as as.vector(t(mcenv$educ))
+  cl_codes <- colnames(meta$tfr_matrix)
+  cl_years <- rownames(meta$tfr_matrix)
+  # create matrix with all country code x year combinations
+  clusterUNregion <- data.frame(matrix(nrow = length(cl_codes)*length(cl_years), ncol=4))
+  colnames(clusterUNregion) <- c("code", "year", "region", "cluster")
+  clusterUNregion[ , 1] <- rep(cl_codes, length(cl_years))
+  clusterUNregion[ , 2] <- rep(cl_years, each=length(cl_codes))
+  # Add region name
+  data(UNlocations, package="wpp2022")
+  for(i in 1:nrow(clusterUNregion)){
+    cd <- clusterUNregion$code[i]
+    clusterUNregion$region[i] <- as.character(UNlocations$reg_name[which(UNlocations$country_code==cd)])
   }
-  # retain only countries in tfr_matrix
-  clusterUNregion <- filter(clusterUNregion, code %in% colnames(meta$tfr_matrix))
+  # convert year and region to factors
+  clusterUNregion$year <- as.factor(clusterUNregion$year)
+  clusterUNregion$region <- as.factor(clusterUNregion$region)
+  # use expand.grid to find clusters
+  cluster_factor <- expand.grid(levels(clusterUNregion$region), levels(clusterUNregion$year))
+  colnames(cluster_factor) <- c("reg", "year")
+  # give each cluster a numeric label
+  cluster_factor <- cluster_factor %>% 
+    bind_cols("clust" = as.factor(seq(1, nrow(cluster_factor))))
+  # append to clusterUNregion
+  for(i in 1:nrow(clusterUNregion)){
+    region <- clusterUNregion$region[i]
+    yr <- as.numeric(as.character(clusterUNregion$year[i]))
+    clusterUNregion$cluster[i] <- filter(cluster_factor, reg == region & year == yr)$clust
+  }
   meta$cluster <- clusterUNregion$cluster
   
   ##### start index of covariate data for each country #####
@@ -387,7 +410,7 @@ covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.
   ##### indicator for SSA membership #####
   # SSA = region codes c(910, 911, 913, 914)
   # i.e. region names Eastern Africa, Middle Africa, Southern Africa, Western Africa
-  SSA_indicator <- filter(clusterUNregion, year == 2020) %>% select(code, region)
+  SSA_indicator <- filter(clusterUNregion, year == 1970) %>% select(code, region)
   SSA_indicator$SSA <- SSA_indicator$region %in% c("Eastern Africa", "Middle Africa", "Southern Africa", "Western Africa")
   SSA_indicator <- filter(SSA_indicator, code %in% colnames(meta$tfr_matrix)) 
   meta$SSA_indicator <- as.numeric(SSA_indicator$SSA)

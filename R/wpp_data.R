@@ -103,7 +103,7 @@ do.read.un.file <- function(un.file.name, wpp.year, my.file=NULL, present.year=2
 		# DAPHNE TEMPORARY EDIT 20230903:
 		# read.tfr.file doesn't work when column names are annual, so do this manually
 		my.tfr_data <- read.csv(file=my.tfr.file)
-		colnames(my.tfr_data) <- c("country", "country_code", as.character(seq(1970, 2020)), "include_code")
+		colnames(my.tfr_data) <- c("country", "country_code", as.character(seq(1970, 2019)), "include_code")
 		# end Daphne
 		colnames(my.tfr_data)[colnames(my.tfr_data)=='name'] <- 'country'
 		if(use.wpp.data)
