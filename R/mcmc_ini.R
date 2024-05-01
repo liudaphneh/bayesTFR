@@ -162,7 +162,12 @@ get.observed.with.supplemental <- function(country.index, matrix, suppl.data, ma
     	supp.c.idx <- suppl.data$index.from.all.countries[country.index]
     	if(is.na(supp.c.idx)) {sdata <- rep(NA, nrow(suppl.data[[matrix.name]])); names(sdata) <- rownames(suppl.data[[matrix.name]])}
     	else sdata <- suppl.data[[matrix.name]][,supp.c.idx]
-    	data <- c(sdata, data)
+    	
+    	# Daphne edit 20240414 to add if statement around data <- c(sdata, data)
+    	# since in my five-year run this just duplicates the data...
+    	if(!all.equal(sdata, data)){
+    	  data <- c(sdata, data)
+    	}
     }
 	return(data)
 }
@@ -175,7 +180,6 @@ find.tau.lambda.and.DLcountries <- function(tfr_matrix, min.TFRlevel.for.start.a
     # gets ids of DL (where decline has been observed)
     # and divides those into early (tau_c has been not observed) and not early (tau_c observed)
     # find lambda_c's based on definition tfr increased twice, below 2 (start of Phase III)
-
     post.v2 <- TRUE
 	if(!is.null(getOption("TFRphase2.pre.v2", NULL)) && getOption("TFRphase2.pre.v2")==TRUE) {
         # This is for backward-compatibility to make some publications reproducible.
@@ -289,16 +293,21 @@ find.raw.data.outliers <- function(raw.tfr, iso.unbiased, max.drop=1, max.increa
 covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.file("extdata", package = "bayesTFR")){
   # import covariate data
   if(annual){
-    # educ = ../Data/bayesTFR_educ_annual_20240107.txt
+    # educ = ../Data/bayesTFR_educ_annual_20240107.txt for interpolation of X
+    # educ = ../Data/bayesTFR_educ_annual_20240428.txt for interpolation of DeltaX centered
     educ <- read.table(paste0(covariate.filepath, "/bayestfr_educ_annual.txt"))
-    # fp = ../Data/bayestfr_fp_annual_20240310.txt
+    # fp = ../Data/bayestfr_fp_annual_20240310.txt for all women
+    #    = ../Data/bayestfr_fp_annual_married_20240406.txt for married women only
+    # (current version is married women only)
     fp <- read.table(paste0(covariate.filepath, "/bayestfr_fp_annual.txt"))
     # gdp = ../Data/bayestfr_gdp_annual_20231112.txt
     gdp <- read.table(paste0(covariate.filepath, "/bayestfr_gdp_annual.txt"))
   } else{
     # educ = ../Data/bayesTFR_educ_5pd_20240107.txt
     educ <- read.table(paste0(covariate.filepath, "/bayestfr_educ_5pd.txt"))
-    # fp = ../Data/bayestfr_fp_5pd_20240310.txt
+    # fp = ../Data/bayestfr_fp_5pd_20240310.txt for all women
+    #    = ../Data/bayestfr_fp_5pd_married_20240406.txt for married women only
+    # (current version is married women only)
     fp <- read.table(paste0(covariate.filepath, "/bayestfr_fp_5pd.txt"))
     # gdp = ../Data/bayestfr_gdp_five_year_20231112.txt
     gdp <- read.table(paste0(covariate.filepath, "/bayestfr_gdp_5pd.txt"))
@@ -319,6 +328,7 @@ covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.
   # add countries with no educ data
   no.educ.data <- data.frame(matrix(nrow = nrow(educ.w), ncol = length(setdiff(colnames(meta$tfr_matrix), colnames(educ.w)))))
   colnames(no.educ.data) <- setdiff(colnames(meta$tfr_matrix), colnames(educ.w))
+  rownames(no.educ.data) <- rownames(educ.w)
   educ.w <- bind_cols(educ.w, no.educ.data)
   educ.w <- select(educ.w, colnames(meta$tfr_matrix))
   
@@ -410,7 +420,7 @@ covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.
   ##### indicator for SSA membership #####
   # SSA = region codes c(910, 911, 913, 914)
   # i.e. region names Eastern Africa, Middle Africa, Southern Africa, Western Africa
-  SSA_indicator <- filter(clusterUNregion, year == 1970) %>% select(code, region)
+  SSA_indicator <- filter(clusterUNregion, year == rownames(meta$tfr_matrix)[1]) %>% select(code, region)
   SSA_indicator$SSA <- SSA_indicator$region %in% c("Eastern Africa", "Middle Africa", "Southern Africa", "Western Africa")
   SSA_indicator <- filter(SSA_indicator, code %in% colnames(meta$tfr_matrix)) 
   meta$SSA_indicator <- as.numeric(SSA_indicator$SSA)
@@ -434,7 +444,6 @@ decr.meta.ini <- function(meta){
     tfr.vctr <- get.observed.tfr(country, meta)[start_idx:meta$lambda_c[country]]
     ldl <- length(tfr.vctr)-1
     tfr.decr.vctr <- tfr.vctr[2:(ldl+1)] - tfr.vctr[1:ldl]
-    tfr.decr.vctr <- c("1970" = NA, tfr.decr.vctr)
     tfr.decr[names(tfr.decr.vctr), country] <- tfr.decr.vctr
   }
   
@@ -925,6 +934,7 @@ mcmc.meta.ini.extra <- function(mcmc.set, countries=NULL, my.tfr.file = NULL,
 		return(nreg)
 	}
 	meta <- mcmc.set$meta
+
 	#create tfr matrix only for the extra countries
 	tfr.with.regions <- set.wpp.extra(meta, countries=countries, annual = meta$annual.simulation,
 									  my.tfr.file = my.tfr.file, my.locations.file=my.locations.file, 
