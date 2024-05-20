@@ -712,31 +712,31 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 	# Daphne: Phase III steps if using second.stage.uncertainty
 	if(second.stage.uncertainty)
 	{
-	  m.default <- get.tfr.mcmc(sim.dir = first.stage.directory, chain.ids = first.stage.chains)
+	  m_firststage <- get.tfr.mcmc(sim.dir = first.stage.directory, chain.ids = first.stage.chains)
 	  
-	  output$raw_data.original <- m.default$meta$raw_data.original
-	  output$indices.outliers <- m.default$meta$indices.outliers
-	  output$yearly.outliers <- m.default$meta$yearly.outliers
+	  output$raw_data.original <- m_firststage$meta$raw_data.original
+	  output$indices.outliers <- m_firststage$meta$indices.outliers
+	  output$yearly.outliers <- m_firststage$meta$yearly.outliers
 
 	  if (meta$annual.simulation)
 	  {
-	    output$raw_data.original$year <- m.default$meta$raw_data.original$year
-	    output$country.ind.by.year <- m.default$meta$country.ind.by.year
-	    output$ind.by.year <- m.default$meta$ind.by.year
+	    output$raw_data.original$year <- m_firststage$meta$raw_data.original$year
+	    output$country.ind.by.year <- m_firststage$meta$country.ind.by.year
+	    output$ind.by.year <- m_firststage$meta$ind.by.year
 	  }
 	  else
 	  {
-	    output$country.ind.by.year <- m.default$meta$country.ind.by.year
-	    output$ind.by.year <- m.default$meta$ind.by.year
-	    output$left.distance <- m.default$meta$left.distance
+	    output$country.ind.by.year <- m_firststage$meta$country.ind.by.year
+	    output$ind.by.year <- m_firststage$meta$ind.by.year
+	    output$left.distance <- m_firststage$meta$left.distance
 	  }
 	  
-	  output$tfr_all <- m.default$meta$tfr_all
-	  output$tfr_mu_all <- m.default$meta$tfr_mu_all
-	  output$tfr_sd_all <- m.default$meta$tfr_sd_all
-	  output$id_phase1_by_year <- m.default$meta$id_phase1_by_year
-	  output$id_phase2_by_year <- m.default$meta$id_phase2_by_year
-	  output$id_phase3_by_year <- m.default$meta$id_phase3_by_year
+	  output$tfr_all <- m_firststage$meta$tfr_all
+	  output$tfr_mu_all <- m_firststage$meta$tfr_mu_all
+	  output$tfr_sd_all <- m_firststage$meta$tfr_sd_all
+	  output$id_phase1_by_year <- m_firststage$meta$id_phase1_by_year
+	  output$id_phase2_by_year <- m_firststage$meta$id_phase2_by_year
+	  output$id_phase3_by_year <- m_firststage$meta$id_phase3_by_year
 	}
 
 	if (meta$annual.simulation) output$ar.phase2 <- ar.phase2

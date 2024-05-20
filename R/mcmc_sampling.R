@@ -53,9 +53,9 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
     }
     
     # Daphne: load in MCMC object from first stage of estimation
-    m.default <- get.tfr.mcmc(mcmc$meta$first.stage.directory, chain.ids = mcmc$meta$first.stage.chains)
+    m_firststage <- get.tfr.mcmc(mcmc$meta$first.stage.directory, chain.ids = mcmc$meta$first.stage.chains)
     if (mcmc$meta$second.stage.uncertainty){
-      m.default.3 <- get.tfr3.mcmc(mcmc$meta$first.stage.directory, chain.ids = mcmc$meta$first.stage.3.chains)
+      m_firststage.3 <- get.tfr3.mcmc(mcmc$meta$first.stage.directory, chain.ids = mcmc$meta$first.stage.3.chains)
     }
     
     if (uncertainty)
@@ -276,39 +276,39 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 
 	############ DAPHNE: load parameter traces from first.stage.directory ############
 	# in second stage, beta and rho_bc are sampled conditionally on the parameters of bayesTFR from the first stage of estimation
-	# load in the parameter traces from first.stage.directory, which contains a converged run of default (unconditional) bayesTFR
-	mean_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("mean_eps_tau"),
+	# load in the parameter traces from first.stage.directory, which contains a converged run of unconditional bayesTFR
+	mean_eps_tau.traces <- get.tfr.parameter.traces(m_firststage$mcmc.list, c("mean_eps_tau"),
 	                                                burnin = mcenv$meta$first.stage.burnin)
-	sd_eps_tau.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("sd_eps_tau"),
+	sd_eps_tau.traces <- get.tfr.parameter.traces(m_firststage$mcmc.list, c("sd_eps_tau"),
 	                                              burnin = mcenv$meta$first.stage.burnin)
-	chi.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("chi"), burnin = mcenv$meta$first.stage.burnin)
-	psi.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("psi"), burnin = mcenv$meta$first.stage.burnin)
-	Triangle4.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("Triangle4"),
+	chi.traces <- get.tfr.parameter.traces(m_firststage$mcmc.list, c("chi"), burnin = mcenv$meta$first.stage.burnin)
+	psi.traces <- get.tfr.parameter.traces(m_firststage$mcmc.list, c("psi"), burnin = mcenv$meta$first.stage.burnin)
+	Triangle4.traces <- get.tfr.parameter.traces(m_firststage$mcmc.list, c("Triangle4"),
 	                                             burnin = mcenv$meta$first.stage.burnin)
-	delta4.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("delta4"),
+	delta4.traces <- get.tfr.parameter.traces(m_firststage$mcmc.list, c("delta4"),
 	                                          burnin = mcenv$meta$first.stage.burnin)
-	alpha.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("alpha"),
+	alpha.traces <- get.tfr.parameter.traces(m_firststage$mcmc.list, c("alpha"),
 	                                         burnin = mcenv$meta$first.stage.burnin)
-	delta.traces <- get.tfr.parameter.traces(m.default$mcmc.list, c("delta"),
+	delta.traces <- get.tfr.parameter.traces(m_firststage$mcmc.list, c("delta"),
 	                                         burnin = mcenv$meta$first.stage.burnin)
 	
 	# if using Phase II AR(1) 
 	if(!is.null(mcenv$meta$ar.phase2) && mcenv$meta$ar.phase2){
-	  rho_phase2.traces <- get.tfr.parameter.traces(m.default$mcmc.list, "rho_phase2", 
+	  rho_phase2.traces <- get.tfr.parameter.traces(m_firststage$mcmc.list, "rho_phase2", 
 	                                                burnin = mcenv$meta$first.stage.burnin)
 	}
 	
-	# if m.default used uncertainty = TRUE, also get the Phase III traces
+	# if m_firststage used uncertainty = TRUE, also get the Phase III traces
 	if(mcenv$second.stage.uncertainty){
-	  mu.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("mu"), 
+	  mu.traces <- get.tfr3.parameter.traces(m_firststage.3$mcmc.list, c("mu"), 
 	                                         burnin = mcenv$meta$first.stage.burnin)
-	  rho.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("rho"), 
+	  rho.traces <- get.tfr3.parameter.traces(m_firststage.3$mcmc.list, c("rho"), 
 	                                          burnin = mcenv$meta$first.stage.burnin)
-	  sigma.mu.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("sigma.mu"), 
+	  sigma.mu.traces <- get.tfr3.parameter.traces(m_firststage.3$mcmc.list, c("sigma.mu"), 
 	                                               burnin = mcenv$meta$first.stage.burnin)
-	  sigma.rho.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("sigma.rho"), 
+	  sigma.rho.traces <- get.tfr3.parameter.traces(m_firststage.3$mcmc.list, c("sigma.rho"), 
 	                                                burnin = mcenv$meta$first.stage.burnin)
-	  sigma.eps.traces <- get.tfr3.parameter.traces(m.default.3$mcmc.list, c("sigma.eps"), 
+	  sigma.eps.traces <- get.tfr3.parameter.traces(m_firststage.3$mcmc.list, c("sigma.eps"), 
 	                                                burnin = mcenv$meta$first.stage.burnin)
 	}
 
@@ -326,16 +326,16 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 
 	for (country in id_DL_all){
 	  cd <- get.country.object(country, meta = mcenv$meta, index = TRUE)$code
-	  country.i.obj <- get.country.object(cd, meta = m.default$meta, index = FALSE)
-	  country.traces <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = country.i.obj, par.names = c("d", "gamma", "Triangle_c4"), burnin = mcenv$meta$first.stage.burnin)
+	  country.i.obj <- get.country.object(cd, meta = m_firststage$meta, index = FALSE)
+	  country.traces <- get.tfr.parameter.traces.cs(m_firststage$mcmc.list, country.obj = country.i.obj, par.names = c("d", "gamma", "Triangle_c4"), burnin = mcenv$meta$first.stage.burnin)
 	  d.samples[[country]] <- country.traces[iter.sample, 1]
 	  gamma.samples[[country]] <- country.traces[iter.sample, c(2,3,4)]
 	  Trianglec4.samples[[country]] <- country.traces[iter.sample, 5]
-	  U.samples[[country]] <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = country.i.obj, par.names = "U", burnin = mcenv$meta$first.stage.burnin)[iter.sample]
+	  U.samples[[country]] <- get.tfr.parameter.traces.cs(m_firststage$mcmc.list, country.obj = country.i.obj, par.names = "U", burnin = mcenv$meta$first.stage.burnin)[iter.sample]
 	  
 	  if(mcenv$second.stage.uncertainty){
-	    tfr.year <- rownames(m.default$meta$tfr_matrix)
-	    tfr.samples[[country]] <- get.tfr.parameter.traces.cs(m.default$mcmc.list, country.obj = country.i.obj, par.names = c("tfr"), burnin = mcenv$meta$first.stage.burnin)[iter.sample, which(tfr.year %in% rownames(mcenv$meta$tfr_matrix))]
+	    tfr.year <- rownames(m_firststage$meta$tfr_matrix)
+	    tfr.samples[[country]] <- get.tfr.parameter.traces.cs(m_firststage$mcmc.list, country.obj = country.i.obj, par.names = c("tfr"), burnin = mcenv$meta$first.stage.burnin)[iter.sample, which(tfr.year %in% rownames(mcenv$meta$tfr_matrix))]
 	  }
 	}
 
@@ -345,14 +345,14 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 	  mu.c.samples <- list()
 	  rho.c.samples <- list()
 	  for(country in 1:mcenv$meta$nr.countries){
-	    country.i.obj <- get.country.object(m.default.3$meta$id_phase3[country], meta = m.default.3$meta, index = TRUE)
-	    country.traces <- get.tfr3.parameter.traces.cs(m.default.3$mcmc.list, country.obj = country.i.obj, par.names = c("mu.c", "rho.c"), burnin = mcenv$meta$first.stage.burnin)
+	    country.i.obj <- get.country.object(m_firststage.3$meta$id_phase3[country], meta = m_firststage.3$meta, index = TRUE)
+	    country.traces <- get.tfr3.parameter.traces.cs(m_firststage.3$mcmc.list, country.obj = country.i.obj, par.names = c("mu.c", "rho.c"), burnin = mcenv$meta$first.stage.burnin)
 	    mu.c.samples[[country]] <- country.traces[iter.sample, 1]
 	    rho.c.samples[[country]] <- country.traces[iter.sample, 2]
 	  }
 	}
 
-	# MCMC sampling steps for default bayesTFR parameters have all been modified to be conditional sampling based on parameter traces from m.default
+	# MCMC sampling steps for bayesTFR parameters have all been modified to be conditional sampling based on parameter traces from m_firststage
   ################################################################### 
   # Start MCMC
 	############
@@ -369,7 +369,7 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
         # updates sd_Tc
         # start with this to get the right sd_Tc in the next steps!!
 
-        mcmc.update.abSsigma0const(mcenv, idx.tau_c.id.notearly, trace.sample = iter.sample[iter.idx], m.default = m.default, first.stage.burnin = mcenv$meta$first.stage.burnin)
+        mcmc.update.abSsigma0const(mcenv, idx.tau_c.id.notearly, trace.sample = iter.sample[iter.idx], m_firststage = m_firststage, first.stage.burnin = mcenv$meta$first.stage.burnin)
 
        #################################################################### 
         # 2. mean_eps_tau sd_eps_tau: gibbs step

@@ -1,5 +1,5 @@
 # Daphne:
-#    - first.stage.directory = directory where the first stage of estimation (i.e. m.default) is stored
+#    - first.stage.directory = directory where the first stage of estimation (i.e. m_firststage) is stored
 #    - first.stage.burnin = amount of burnin to use for run stored in first.stage.directory
 #    - first.stage.chains = chain IDs to use for Phase II of first stage of estimation
 #    - first.stage.3.chains = chain IDs to use for Phase III of first stage of estimation
@@ -79,8 +79,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	# DAPHNE
 	# if second.stage.uncertainty = TRUE, check that first stage actually used uncertainty = TRUE
 	if(second.stage.uncertainty){
-	  m.default <- get.tfr.mcmc(sim.dir = first.stage.directory, chain.ids = first.stage.chains)
-	  if(!m.default$mcmc.list$`1`$uncertainty){
+	  m_firststage <- get.tfr.mcmc(sim.dir = first.stage.directory, chain.ids = first.stage.chains)
+	  if(!m_firststage$mcmc.list$`1`$uncertainty){
 	    second.stage.uncertainty = FALSE
 	    warning('First stage used uncertainty = FALSE, so second.stage.uncertainty was set to FALSE.')
 	  }
@@ -184,8 +184,8 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	# Daphne:
 	if(second.stage.uncertainty)
 	{
-	  bayesTFR.mcmc.meta[["covariates"]] <- m.default$meta$covaraites
-	  bayesTFR.mcmc.meta[["cont_covariates"]] <- m.default$meta$cont_covariates
+	  bayesTFR.mcmc.meta[["covariates"]] <- m_firststage$meta$covaraites
+	  bayesTFR.mcmc.meta[["cont_covariates"]] <- m_firststage$meta$cont_covariates
 	}
 	store.bayesTFR.meta.object(bayesTFR.mcmc.meta, output.dir)
 	
@@ -267,16 +267,16 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	  }
 	  
 	  dir.create(file.path(output.dir, 'phaseIII'))
-	  mu.prior.range <- m.default$meta$mu.prior.range
-	  rho.prior.range <- m.default$meta$rho.prior.range
-	  sigma.mu.prior.range <- m.default$meta$sigma.mu.prior.range
-	  sigma.rho.prior.range <- m.default$meta$sigma.rho.prior.range
-	  sigma.eps.prior.range <- m.default$meta$sigma.eps.prior.range
-	  mu.ini <- m.default$meta$mu.ini
-	  rho.ini <- m.default$meta$rho.ini
-	  sigma.mu.ini <- m.default$meta$sigma.mu.ini
-	  sigma.rho.ini <- m.default$meta$sigma.rho.ini
-	  sigma.eps.ini <- m.default$meta$sigma.eps.ini
+	  mu.prior.range <- m_firststage$meta$mu.prior.range
+	  rho.prior.range <- m_firststage$meta$rho.prior.range
+	  sigma.mu.prior.range <- m_firststage$meta$sigma.mu.prior.range
+	  sigma.rho.prior.range <- m_firststage$meta$sigma.rho.prior.range
+	  sigma.eps.prior.range <- m_firststage$meta$sigma.eps.prior.range
+	  mu.ini <- m_firststage$meta$mu.ini
+	  rho.ini <- m_firststage$meta$rho.ini
+	  sigma.mu.ini <- m_firststage$meta$sigma.mu.ini
+	  sigma.rho.ini <- m_firststage$meta$sigma.rho.ini
+	  sigma.eps.ini <- m_firststage$meta$sigma.eps.ini
 	  
 	  for (varname in c('mu', 'rho', 'sigma.mu', 'sigma.rho', 'sigma.eps'))
 	  {
@@ -292,11 +292,11 @@ run.tfr.mcmc <- function(nr.chains=3, iter=62000, output.dir=file.path(getwd(), 
 	    }
 	  }
 	  
-	  c.index <- 1:get.nr.countries(m.default$meta)
+	  c.index <- 1:get.nr.countries(m_firststage$meta)
 	  meta <- structure(list(nr.chains=nr.chains,
 	                         my.tfr.file=my.tfr.file, output.dir=output.dir,
-	                         phase=3, id_phase3 = m.default$meta$id_phase3,
-	                         nr.countries=m.default$meta$nr.countries,
+	                         phase=3, id_phase3 = m_firststage$meta$id_phase3,
+	                         nr.countries=m_firststage$meta$nr.countries,
 	                         mu.prior.range=mu.prior.range, rho.prior.range=rho.prior.range,
 	                         sigma.mu.prior.range=sigma.mu.prior.range, 
 	                         sigma.rho.prior.range=sigma.rho.prior.range,

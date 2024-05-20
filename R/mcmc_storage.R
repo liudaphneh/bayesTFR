@@ -251,10 +251,10 @@ store.mcmc3 <- local({
 							else buffer3.cs[[par]][[country]][1:counter3,]
 				# Daphne: edited so get.country.object call depends on second.stage.uncertainty
 				if(mcmc$second.stage.uncertainty){
-				  m.default <- get.tfr.mcmc(mcmc$first.stage.directory)
+				  m_firststage <- get.tfr.mcmc(mcmc$first.stage.directory)
 				  write.values.into.file.cdep(par, values, output.dir, 
 				                              get.country.object(mcmc$meta$id_phase3[country], 
-				                                                 meta=m.default$meta, index=TRUE)$code, 
+				                                                 meta=m_firststage$meta, index=TRUE)$code, 
 				                              mode=open, compression.type=mcmc$compression.type)
 				} else{
 				  write.values.into.file.cdep(par, values, output.dir, 
