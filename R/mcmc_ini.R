@@ -21,7 +21,7 @@ DLcurve <- function(DLpar, tfr, p1, p2, annual = FALSE){
 # function to get the distortion for country for a given set of DLparameters
 # note: this function gives only the eps's in (tau, lambda-1)
 # (because rest is NA!!)
-# DAPHNE:
+# Daphne edits:
 #    - modified to account for covariate term in eps calculation
 #    - added argument betapar = c(beta_E, beta_FP, beta_GDP, beta_e_SSA, beta_fp_SSA, beta_g_SSA)
 #    - added argument tfr_trace, has form tfr.samples[[country]][iter.idx, ]
@@ -75,7 +75,7 @@ get.eps.T <- function (DLpar, betapar, tfr_trace = NULL, country, meta, ...)
   return (eps)
 }
 
-# DAPHNE
+# Daphne edits:
 #    - modified to account for covariate term in eps calculation
 #    - and to handle tfr_trace needed for get.eps.T
 get_eps_T_all <- function (mcmc, ...) {
@@ -163,8 +163,9 @@ get.observed.with.supplemental <- function(country.index, matrix, suppl.data, ma
     	if(is.na(supp.c.idx)) {sdata <- rep(NA, nrow(suppl.data[[matrix.name]])); names(sdata) <- rownames(suppl.data[[matrix.name]])}
     	else sdata <- suppl.data[[matrix.name]][,supp.c.idx]
     	
-    	# Daphne edit 20240414 to add if statement around data <- c(sdata, data)
-    	# since in my five-year run this just duplicates the data...
+    	# Daphne 20240414: edited below to add if statement around data <- c(sdata, data)
+    	# since in my five-year run this just duplicates the data...? 
+    	# need to check this later
     	if(!all.equal(sdata, data)){
     	  data <- c(sdata, data)
     	}
@@ -239,6 +240,17 @@ find.tau.lambda.and.DLcountries <- function(tfr_matrix, min.TFRlevel.for.start.a
         lambda_c[country] <- do.call(getOption("TFRphase3findfct", "find.lambda.for.one.country"), 
                                      list(data, T_end_c[country], annual = annual))
         
+        # Daphne 20240908: 
+        # tfr_matrix reflects covariate data availability, which artificially restricts T_end to 50
+        # so the resulting lambda_c's do not actually represent end of Phase II
+        # and for some countries the last time period (50 = 2019) is removed unnecessarily...
+        # for now, adding in a brute force fix that sets lambda_c = T_end for these countries
+        # but need to check this later
+        if((lambda_c[country] == (T_end_c[country] - 1)) & !is.na(tfr_matrix[T_end_c[country], country])){ 
+          lambda_c[country] <- T_end_c[country] 
+          }
+        # end Daphne
+        
         if (lambda_c[country] < T_end_c[country]) { # set NA all values between lambda_c and T_c_end
          	if(lambda_c[country] < T.suppl) {
          		suppl.data$tfr_matrix[(lambda_c[country] + 1):min(T.suppl, T_end_c[country]),
@@ -284,7 +296,7 @@ find.raw.data.outliers <- function(raw.tfr, iso.unbiased, max.drop=1, max.increa
 }
 
 
-# DAPHNE: function for covariate additions to meta
+# Daphne: function to add covariate information to meta object
 #    - looks in filepath covariate.filepath
 #    - adds education, FP, and GDP data
 #    - adds indicator for whether countries have available covariate data 
@@ -293,21 +305,16 @@ find.raw.data.outliers <- function(raw.tfr, iso.unbiased, max.drop=1, max.increa
 covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.file("extdata", package = "bayesTFR")){
   # import covariate data
   if(annual){
-    # educ = ../Data/bayesTFR_educ_annual_20240107.txt for interpolation of X
-    # educ = ../Data/bayesTFR_educ_annual_20240428.txt for interpolation of DeltaX centered
+    # educ = ../Data/bayesTFR_educ_annual_20240428.txt 
     educ <- read.table(paste0(covariate.filepath, "/bayestfr_educ_annual.txt"))
-    # fp = ../Data/bayestfr_fp_annual_20240310.txt for all women
-    #    = ../Data/bayestfr_fp_annual_married_20240406.txt for married women only
-    # (current version is married women only)
+    # fp = ../Data/bayestfr_fp_annual_married_20240905.txt 
     fp <- read.table(paste0(covariate.filepath, "/bayestfr_fp_annual.txt"))
     # gdp = ../Data/bayestfr_gdp_annual_20231112.txt
     gdp <- read.table(paste0(covariate.filepath, "/bayestfr_gdp_annual.txt"))
   } else{
     # educ = ../Data/bayesTFR_educ_5pd_20240107.txt
     educ <- read.table(paste0(covariate.filepath, "/bayestfr_educ_5pd.txt"))
-    # fp = ../Data/bayestfr_fp_5pd_20240310.txt for all women
-    #    = ../Data/bayestfr_fp_5pd_married_20240406.txt for married women only
-    # (current version is married women only)
+    # fp = ../Data/bayestfr_fp_5pd_married_20240905.txt
     fp <- read.table(paste0(covariate.filepath, "/bayestfr_fp_5pd.txt"))
     # gdp = ../Data/bayestfr_gdp_five_year_20231112.txt
     gdp <- read.table(paste0(covariate.filepath, "/bayestfr_gdp_5pd.txt"))
@@ -412,14 +419,14 @@ covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.
   meta$cluster <- clusterUNregion$cluster
   
   ##### start index of covariate data for each country #####
-  # if we want this to be start index of DeltaX
+  # if we want this to be start index of DeltaX (not used)
   #meta$start_cov_data_c <- as.numeric(apply(meta$cc_matrix, 2, function(x){which(x == TRUE)}[1]))
   # if we want this to be start index of X
   meta$start_cov_data_c <- as.numeric(apply(meta$cc_matrix, 2, function(x){which(x == TRUE)}[1] - 1))
   
   ##### indicator for SSA membership #####
   # SSA = region codes c(910, 911, 913, 914)
-  # i.e. region names Eastern Africa, Middle Africa, Southern Africa, Western Africa
+  # region names = Eastern Africa, Middle Africa, Southern Africa, Western Africa
   SSA_indicator <- filter(clusterUNregion, year == rownames(meta$tfr_matrix)[1]) %>% select(code, region)
   SSA_indicator$SSA <- SSA_indicator$region %in% c("Eastern Africa", "Middle Africa", "Southern Africa", "Western Africa")
   SSA_indicator <- filter(SSA_indicator, code %in% colnames(meta$tfr_matrix)) 
@@ -428,7 +435,7 @@ covariate.meta.ini <- function(meta, annual = TRUE, covariate.filepath = system.
   return(meta)
 }
 
-# DAPHNE: function for TFR decrement additions to meta
+# Daphne: function for TFR decrement additions to meta
 #    - constructs TFR decrements where delta f_{c,t+1} = f_{c,t+1} - f_{c,t}
 #    - decrements are labeled with year t+1
 #    - saved as tfr_decr in meta, formatted like tfr_matrix
@@ -452,9 +459,9 @@ decr.meta.ini <- function(meta){
 }
 
 
-# DAPHNE: 
+# Daphne edits: 
 #    - added calls to covariate.meta.ini and decr.meta.ini
-#    - added arguments first.stage.directory, first.stage.burnin, first.stage.chains, first.stage.3.chains, second.stage.uncertainty, covariate.filepath
+#    - added arguments first.stage.directory, first.stage.burnin, first.stage.chains, first.stage.3.chains, second.stage.uncertainty, covariate.filepath, covariate.proj.filepath
 mcmc.meta.ini <- function(...,
 						U.c.low,
 						start.year=1950, present.year=2020, 
@@ -468,6 +475,7 @@ mcmc.meta.ini <- function(...,
 						first.stage.3.chains = NULL,
 						second.stage.uncertainty=FALSE, 
 						covariate.filepath=system.file("extdata", package = "bayesTFR"), 
+						covariate.proj.filepath=NULL,
 						# end Daphne
 						my.tfr.raw.file=NULL, 
 						ar.phase2=FALSE, iso.unbiased=NULL, source.col.name = "source",
@@ -501,6 +509,7 @@ mcmc.meta.ini <- function(...,
 						first.stage.3.chains = first.stage.3.chains,
 						second.stage.uncertainty = second.stage.uncertainty, 
 						covariate.filepath=covariate.filepath,
+						covariate.proj.filepath=covariate.proj.filepath,
 						# end Daphne
 						my.tfr.raw.file=my.tfr.raw.file, ar.phase2=ar.phase2, 
 						iso.unbiased=iso.unbiased, source.col.name = source.col.name)
@@ -529,6 +538,7 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 						first.stage.3.chains = NULL,
 						second.stage.uncertainty=FALSE, 
 						covariate.filepath=system.file("extdata", package = "bayesTFR"),
+						covariate.proj.filepath=NULL,
 						# end Daphne
 						my.tfr.raw.file=NULL, 
 						ar.phase2=FALSE, iso.unbiased=NULL, source.col.name = "source") {
@@ -747,7 +757,7 @@ do.meta.ini <- function(meta, tfr.with.regions, proposal_cov_gammas = NULL,
 
 # ini MCMC for UN estimates
 
-# DAPHNE
+# Daphne edits:
 #    - added initialization for covariates
 mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 					 S.ini=5, 
@@ -770,6 +780,7 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 					 second.stage.uncertainty=FALSE,
 					 sampled_iter.ini=0,
 					 covariate.filepath=system.file("extdata", package = "bayesTFR"),
+					 covariate.proj.filepath=NULL,
 					 # end Daphne
 					 save.all.parameters=FALSE,
 					 verbose=FALSE, uncertainty=FALSE, iso.unbiased=NULL,
@@ -877,6 +888,7 @@ mcmc.ini <- function(chain.id, mcmc.meta, iter=100,
 						            sampled_iter=sampled_iter,
 						            sampled_iter.ini=sampled_iter.ini,
 						            covariate.filepath=covariate.filepath,
+						            covariate.proj.filepath=covariate.proj.filepath,
 						            # end Daphne
                         iter=iter, finished.iter=1, length = 1,
                         id=chain.id,

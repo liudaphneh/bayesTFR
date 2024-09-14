@@ -46,8 +46,9 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
     prod_delta0 <- mcmc$meta$nu.delta0*mcmc$meta$delta0^2 
     
     suppl.T <- if(!is.null(mcmc$meta$suppl.data$regions)) mcmc$meta$suppl.data$T_end else 0
-    # Daphne edit 20240414 to force suppl.T to be 0 if annual = FALSE 
-    # since in my five-year run the suppl.data just duplicates my data...
+    # Daphne 20240414: editing to force suppl.T to be 0 if annual = FALSE 
+    # since in my five-year run the suppl.data just duplicates my data
+    # but check this later
     if(!mcmc$meta$annual.simulation){
       suppl.T <- 0
     }
@@ -336,6 +337,8 @@ tfr.mcmc.sampling <- function(mcmc, thin=1, start.iter=2, verbose=FALSE, verbose
 	  if(mcenv$second.stage.uncertainty){
 	    tfr.year <- rownames(m_firststage$meta$tfr_matrix)
 	    tfr.samples[[country]] <- get.tfr.parameter.traces.cs(m_firststage$mcmc.list, country.obj = country.i.obj, par.names = c("tfr"), burnin = mcenv$meta$first.stage.burnin)[iter.sample, which(tfr.year %in% rownames(mcenv$meta$tfr_matrix))]
+	    shift <- get.tfr.shift.estimation(country.i.obj$code, m_firststage$meta)[which(tfr.year %in% rownames(mcenv$meta$tfr_matrix))]
+	    if (!is.null(shift)){ tfr.samples[[country]] <- t(t(tfr.samples[[country]]) + shift) }
 	  }
 	}
 
