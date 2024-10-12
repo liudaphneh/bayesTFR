@@ -135,9 +135,9 @@ find.lambda.for.one.country <- function(tfr, T_end, annual = FALSE) {
 	if(annual)  # convert lambda from 5-year scale to annual scale
 	{
 	  lambda <- min(which(year.bin == lambda) + 2, Tendorig)
-	  if (length(year.bin) - lambda < 5) { # if in the last time period, set it to the end of the period
-	      lambda <- length(year.bin) 
-	      while(is.na(tfrorig[lambda])) lambda <- lambda - 1 # move it before the last NA if any
+	  if (Tendorig - lambda < 5) { # if in the last (observed) time period, set it to the end of the period
+	    lambda <- Tendorig
+	    #while(is.na(tfrorig[lambda])) lambda <- lambda - 1 # move it before the last NA if any - not needed anymore
 	  }
 	}
 
@@ -239,17 +239,6 @@ find.tau.lambda.and.DLcountries <- function(tfr_matrix, min.TFRlevel.for.start.a
         # end index of Phase II
         lambda_c[country] <- do.call(getOption("TFRphase3findfct", "find.lambda.for.one.country"), 
                                      list(data, T_end_c[country], annual = annual))
-        
-        # Daphne 20240908: 
-        # tfr_matrix reflects covariate data availability, which artificially restricts T_end to 50
-        # so the resulting lambda_c's do not actually represent end of Phase II
-        # and for some countries the last time period (50 = 2019) is removed unnecessarily...
-        # for now, adding in a brute force fix that sets lambda_c = T_end for these countries
-        # but need to check this later
-        if((lambda_c[country] == (T_end_c[country] - 1)) & !is.na(tfr_matrix[T_end_c[country], country])){ 
-          lambda_c[country] <- T_end_c[country] 
-          }
-        # end Daphne
         
         if (lambda_c[country] < T_end_c[country]) { # set NA all values between lambda_c and T_c_end
          	if(lambda_c[country] < T.suppl) {
