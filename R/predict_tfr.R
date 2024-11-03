@@ -570,6 +570,24 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
   # selected covariate projection trajectories
   cov_proj_trajs <- cbind("educ" = random_iter_educ, "fp" = random_iter_fp, "gdp" = random_iter_gdp)
   
+  # if using TFR trace from m_firststage, load in traces to be used for all.tfr
+  if(meta$second.stage.uncertainty){
+    all.tfr.firststage <- vector("list", nr_countries_real)
+
+    for (icountry in 1:nr_countries_real){
+      icountry_obj <- get.country.object(prediction.countries[icountry], meta, index=TRUE)
+      icountry_obj_firststage  <- get.country.object(icountry_obj$code, m_firststage$meta, index = FALSE)
+      country <- prediction.countries[icountry]
+      
+      all.tfr.c <- get.tfr.parameter.traces.cs(m_firststage$mcmc.list, country.obj = icountry_obj_firststage, par.names = c("tfr"), burnin = meta$first.stage.burnin)[sampled_iter, m_firststage.tfr.year %in% names(all.tfr.list[[country]])]
+      shift <- get.tfr.shift.estimation(icountry_obj_firststage$code, m_firststage$meta)[m_firststage.tfr.year %in% names(all.tfr.list[[country]])]
+      
+      if (!is.null(shift)){ all.tfr.c <- t(t(all.tfr.c) + shift) }
+      colnames(all.tfr.c) <- names(all.tfr.list[[country]])
+      all.tfr.firststage[[icountry]] <- all.tfr.c
+    }
+  }
+  
   ##### end Daphne
   
   mu.c <- rho.c <- rep(NA, nr_countries)
@@ -591,10 +609,10 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
     verbose.iter <- as.integer(max(1, nr_simu/100))
     if(interactive()) cat('\n')
   }
-  
+
   #########################################
   for (s in 1:nr_simu){ # Iterate over trajectories
-    #########################################
+  #########################################
     if(getOption('bDem.TFRpred', default=FALSE)) {
       # This is to unblock the GUI, if the run is invoked from bayesDem
       # and pass info about its status
@@ -635,9 +653,10 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
     }
     is.in.phase3 <- rep(forceAR1, nr_countries_real)
     S11 <- rep(0, nr_countries_real)
+
     #########################################
     for (year in 2:(max.nr.project+1)) { # Iterate over time
-      #########################################
+    #########################################
       ALLtfr.prev <- all.f_ps[,year-1,s]
       if(use.correlation) {
         cor.mat <- eps.correlation$low
@@ -662,21 +681,17 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
           else epsilons[] <- epsilons.no.na
         }
         tfr.c <- all.f_ps[, year,s]
+
         #########################################
         for (icountry in 1:nr_countries_real){ # Iterate over countries
-          #########################################
+        #########################################
           if(!is.na(all.f_ps[icountry, year,s])) next
           country <- prediction.countries[icountry]	# index within meta (icountry is index within countries for which this is run)
           this.T_end <- meta$T_end_c[country]
           
           # Daphne: add option to use TFR trace from m_firststage as all.tfr
           if(meta$second.stage.uncertainty){
-            icountry_obj <- get.country.object(prediction.countries[icountry], meta, index=TRUE)
-            icountry_obj_firststage  <- get.country.object(icountry_obj$code, m_firststage$meta, index = FALSE)
-            all.tfr <- get.tfr.parameter.traces.cs(m_firststage$mcmc.list, country.obj = icountry_obj_firststage, par.names = c("tfr"), burnin = meta$first.stage.burnin)[sampled_iter[s], m_firststage.tfr.year %in% names(all.tfr.list[[country]])]
-            shift <- get.tfr.shift.estimation(icountry_obj_firststage$code, m_firststage$meta)[m_firststage.tfr.year %in% names(all.tfr.list[[country]])]
-            if (!is.null(shift)){ all.tfr <- t(t(all.tfr) + shift) }
-            names(all.tfr) <- names(all.tfr.list[[country]])
+            all.tfr <- all.tfr.firststage[[icountry]][s,]
           } else{
             all.tfr <- all.tfr.list[[country]]
           }
@@ -830,6 +845,7 @@ make.tfr.prediction <- function(mcmc.set, start.year=NULL, end.year=2100, replac
   } # end simu loop
   if(verbose && interactive()) cat('\n')
   ##############
+
   # Impute missing values if any and compute quantiles
   for (icountry in 1:nr_countries_real){
     country <- prediction.countries[icountry]
